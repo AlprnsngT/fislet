@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingUp,
   Users,
@@ -15,12 +15,16 @@ import {
   RefreshCw,
   BarChart3,
   LineChart as LineChartIcon,
-  Award,
+  Layers,
+  Activity,
+  Package,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
   AreaChart,
   Area,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -63,16 +67,6 @@ interface AnalyticsData {
     fişSayısı: number;
     hacim: number;
   }>;
-  recentReceipts: Array<{
-    id: string;
-    user: string;
-    merchantName: string;
-    totalAmount: number;
-    cashbackAmount: number;
-    status: string;
-    date: string;
-    itemsCount: number;
-  }>;
 }
 
 const COLORS = ['#10b981', '#8b5cf6', '#3b82f6', '#f59e0b', '#ec4899', '#14b8a6'];
@@ -81,6 +75,9 @@ export const AdminDashboardView: React.FC = () => {
   const { user, logout } = useAuthStore();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Dynamic Chart Type Switcher state
+  const [chartType, setChartType] = useState<'area' | 'line' | 'bar' | 'pie'>('area');
 
   const fetchAnalytics = async () => {
     setLoading(true);
@@ -120,7 +117,7 @@ export const AdminDashboardView: React.FC = () => {
                 </span>
               </div>
               <p className="text-xs text-gray-400">
-                Veritabanından çekilen canlı tüketici eğilimleri & grafiksel pazar analizleri
+                Canlı tüketici davranışları, kategori ürün kartları & etkileşimli grafik paneli
               </p>
             </div>
           </div>
@@ -161,9 +158,6 @@ export const AdminDashboardView: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             className="glass-card p-6 rounded-2xl border border-purple-500/20 bg-gradient-to-br from-[#121626] to-[#0c101d] shadow-xl relative overflow-hidden"
           >
-            <div className="absolute top-0 right-0 p-4 opacity-10">
-              <FileCheck className="w-24 h-24 text-purple-400" />
-            </div>
             <div className="flex items-center justify-between text-gray-400 mb-2">
               <span className="text-xs font-bold uppercase tracking-wider text-purple-300">Toplam Fiş Taraması</span>
               <FileCheck className="w-5 h-5 text-purple-400" />
@@ -184,9 +178,6 @@ export const AdminDashboardView: React.FC = () => {
             transition={{ delay: 0.05 }}
             className="glass-card p-6 rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-[#121626] to-[#0c101d] shadow-xl relative overflow-hidden"
           >
-            <div className="absolute top-0 right-0 p-4 opacity-10">
-              <DollarSign className="w-24 h-24 text-emerald-400" />
-            </div>
             <div className="flex items-center justify-between text-gray-400 mb-2">
               <span className="text-xs font-bold uppercase tracking-wider text-emerald-300">Ticari Hacim</span>
               <DollarSign className="w-5 h-5 text-emerald-400" />
@@ -205,9 +196,6 @@ export const AdminDashboardView: React.FC = () => {
             transition={{ delay: 0.1 }}
             className="glass-card p-6 rounded-2xl border border-blue-500/20 bg-gradient-to-br from-[#121626] to-[#0c101d] shadow-xl relative overflow-hidden"
           >
-            <div className="absolute top-0 right-0 p-4 opacity-10">
-              <ShoppingBag className="w-24 h-24 text-blue-400" />
-            </div>
             <div className="flex items-center justify-between text-gray-400 mb-2">
               <span className="text-xs font-bold uppercase tracking-wider text-blue-300">Ortalama Sepet (AOV)</span>
               <ShoppingBag className="w-5 h-5 text-blue-400" />
@@ -215,7 +203,7 @@ export const AdminDashboardView: React.FC = () => {
             <div className="text-3xl font-black text-blue-400">
               ₺{data?.metrics.avgBasketSize.toFixed(2) || '0,00'}
             </div>
-            <div className="text-xs text-gray-400 mt-2">Fiş başına ortalama tüketici harcaması</div>
+            <div className="text-xs text-gray-400 mt-2">Fiş başına ortalama sepet büyüklüğü</div>
           </motion.div>
 
           <motion.div
@@ -224,9 +212,6 @@ export const AdminDashboardView: React.FC = () => {
             transition={{ delay: 0.15 }}
             className="glass-card p-6 rounded-2xl border border-amber-500/20 bg-gradient-to-br from-[#121626] to-[#0c101d] shadow-xl relative overflow-hidden"
           >
-            <div className="absolute top-0 right-0 p-4 opacity-10">
-              <Users className="w-24 h-24 text-amber-400" />
-            </div>
             <div className="flex items-center justify-between text-gray-400 mb-2">
               <span className="text-xs font-bold uppercase tracking-wider text-amber-300">Aktif Müşteri Hacmi</span>
               <Users className="w-5 h-5 text-amber-400" />
@@ -234,181 +219,197 @@ export const AdminDashboardView: React.FC = () => {
             <div className="text-3xl font-black text-amber-400">
               {data?.metrics.totalUsersCount || 0}
             </div>
-            <div className="text-xs text-gray-400 mt-2">Sistemde fiş okutan tekil kullanıcı</div>
+            <div className="text-xs text-gray-400 mt-2">Sistemde kayıtlı aktif tüketici</div>
           </motion.div>
         </div>
 
-        {/* SECTION 1: Dynamic Line Chart (Günlük Fiş Okutma Trend Grafiği) */}
-        <div className="glass-card p-6 rounded-2xl border border-purple-500/20 bg-[#0c101d] shadow-2xl">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/30">
-                <LineChartIcon className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">Zaman Bazlı Fiş Okuma & Hacim Trendi</h3>
-                <p className="text-xs text-gray-400">Pazarlama analizi için son 7 günlük canlı hacim grafik eğrisi</p>
-              </div>
-            </div>
-            <span className="px-3 py-1 rounded-full bg-purple-500/10 text-purple-300 text-xs font-semibold border border-purple-500/30">
-              Çizgi Grafik (Line Chart)
-            </span>
+        {/* SECTION: Category Analysis Cards (Hangi kategoriden kaç ürün geçti?) */}
+        <div className="space-y-4">
+          <div className="flex items-center space-x-2">
+            <Layers className="w-5 h-5 text-purple-400" />
+            <h2 className="text-lg font-bold text-white">Kategori Bazlı Geçen Ürün Kartları</h2>
           </div>
 
-          <div className="h-72 w-full pt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data?.dailyTrend || []}>
-                <defs>
-                  <linearGradient id="colorHacim" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="date" stroke="#6b7280" fontSize={12} tickLine={false} />
-                <YAxis stroke="#6b7280" fontSize={12} tickLine={false} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#121626',
-                    borderColor: '#8b5cf6',
-                    borderRadius: '12px',
-                    color: '#fff',
-                  }}
-                />
-                <Area type="monotone" dataKey="hacim" stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorHacim)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* SECTION 2: Pie Chart & Bar Chart Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Pie Chart: Kategori Dağılımı */}
-          <div className="glass-card p-6 rounded-2xl border border-emerald-500/20 bg-[#0c101d] shadow-2xl">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                  <PieIcon className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">Kategori Bazlı Harcama Dağılımı</h3>
-                  <p className="text-xs text-gray-400">Ürün kategorilerine göre harcama yüzdeleri</p>
-                </div>
-              </div>
-              <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs font-semibold border border-emerald-500/30">
-                Daire Grafik (Pie Chart)
-              </span>
-            </div>
-
-            <div className="h-64 w-full flex items-center justify-center">
-              {data?.categoryAnalytics && data.categoryAnalytics.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={data.categoryAnalytics}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={90}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {data.categoryAnalytics.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#121626',
-                        borderColor: '#10b981',
-                        borderRadius: '12px',
-                        color: '#fff',
-                      }}
-                      formatter={(val: any) => `₺${Number(val).toFixed(2)}`}
-                    />
-                    <Legend verticalAlign="bottom" height={36} iconType="circle" />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="text-gray-500 text-sm">Kategori verisi bulunamadı.</div>
-              )}
-            </div>
-          </div>
-
-          {/* Bar Chart: En Çok Satılan Ürün Trendleri */}
-          <div className="glass-card p-6 rounded-2xl border border-blue-500/20 bg-[#0c101d] shadow-2xl">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/30">
-                  <BarChart3 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">Top Satış Yapan Ürünler</h3>
-                  <p className="text-xs text-gray-400">En çok tercih edilen markalar ve ürün adetleri</p>
-                </div>
-              </div>
-              <span className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-300 text-xs font-semibold border border-blue-500/30">
-                Çubuk Grafik (Bar Chart)
-              </span>
-            </div>
-
-            <div className="h-64 w-full">
-              {data?.topProducts && data.topProducts.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.topProducts}>
-                    <XAxis dataKey="itemName" stroke="#6b7280" fontSize={11} tickLine={false} />
-                    <YAxis stroke="#6b7280" fontSize={11} tickLine={false} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#121626',
-                        borderColor: '#3b82f6',
-                        borderRadius: '12px',
-                        color: '#fff',
-                      }}
-                    />
-                    <Bar dataKey="adet" fill="#3b82f6" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="text-gray-500 text-sm flex items-center justify-center h-full">Ürün verisi bulunamadı.</div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION 3: Merchant Share Cards */}
-        <div className="glass-card p-6 rounded-2xl border border-gray-800 bg-[#0c101d]">
-          <div className="flex items-center space-x-3 mb-6">
-            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/30">
-              <Building2 className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-white">Pazar Payına Göre Mağaza Kırılımı</h3>
-              <p className="text-xs text-gray-400">Fiş okutulan zincir marketlerin ticari hacimleri</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {data?.merchantShare && data.merchantShare.length > 0 ? (
-              data.merchantShare.map((merch) => (
-                <div
-                  key={merch.name}
-                  className="p-4 rounded-xl bg-gray-900/80 border border-gray-800 flex items-center justify-between hover:border-amber-500/30 transition-colors"
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {data?.categoryAnalytics && data.categoryAnalytics.length > 0 ? (
+              data.categoryAnalytics.map((cat, idx) => (
+                <motion.div
+                  key={cat.name}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: idx * 0.05 }}
+                  className="glass-card p-5 rounded-2xl border border-gray-800 bg-[#0c101d] hover:border-purple-500/40 transition-all shadow-lg"
                 >
-                  <div>
-                    <div className="text-sm font-bold text-white">{merch.name}</div>
-                    <div className="text-xs text-gray-400">{merch.fişSayısı} İşlenmiş Fiş</div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{cat.name}</span>
+                    <div
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: COLORS[idx % COLORS.length] }}
+                    />
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-extrabold text-amber-400">
-                      ₺{merch.hacim.toFixed(2)}
-                    </div>
-                    <div className="text-[10px] text-gray-500">Pazar Hacmi</div>
+
+                  <div className="flex items-baseline justify-between mb-1">
+                    <div className="text-2xl font-black text-white">{cat.quantity} Adet</div>
+                    <div className="text-xs font-extrabold text-emerald-400">₺{cat.value.toFixed(2)}</div>
                   </div>
-                </div>
+
+                  <div className="text-[11px] text-gray-400">
+                    Toplam Harcama Payı: %
+                    {(((cat.value || 0) / (data?.metrics.totalVolume || 1)) * 100).toFixed(1)}
+                  </div>
+                </motion.div>
               ))
             ) : (
-              <div className="text-center col-span-full py-6 text-gray-500 text-sm">Mağaza verisi yok.</div>
+              <div className="col-span-full text-center py-6 text-gray-500 text-sm">Kategori verisi bulunamadı.</div>
             )}
+          </div>
+        </div>
+
+        {/* SECTION: Multi-Type Interactive Master Chart */}
+        <div className="glass-card p-6 rounded-2xl border border-purple-500/30 bg-[#0c101d] shadow-2xl space-y-6">
+          {/* Header & Chart Switcher Buttons */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-800/80 pb-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/30">
+                <Activity className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Dinamik Pazarlama Grafiği</h3>
+                <p className="text-xs text-gray-400">Sağdaki butonlardan grafik türünü anında değiştirin</p>
+              </div>
+            </div>
+
+            {/* Interactive Chart Type Buttons */}
+            <div className="flex items-center bg-gray-900/90 p-1.5 rounded-xl border border-gray-800">
+              <button
+                onClick={() => setChartType('area')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 ${
+                  chartType === 'area'
+                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <LineChartIcon className="w-3.5 h-3.5" />
+                <span>Alan (Area)</span>
+              </button>
+
+              <button
+                onClick={() => setChartType('line')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 ${
+                  chartType === 'line'
+                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5" />
+                <span>Çizgi (Line)</span>
+              </button>
+
+              <button
+                onClick={() => setChartType('bar')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 ${
+                  chartType === 'bar'
+                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                <span>Çubuk (Bar)</span>
+              </button>
+
+              <button
+                onClick={() => setChartType('pie')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 ${
+                  chartType === 'pie'
+                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <PieIcon className="w-3.5 h-3.5" />
+                <span>Daire (Pie)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Dynamic Master Chart Rendering Container */}
+          <div className="h-80 w-full pt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              {chartType === 'area' ? (
+                <AreaChart data={data?.dailyTrend || []}>
+                  <defs>
+                    <linearGradient id="areaColor" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.5} />
+                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="date" stroke="#6b7280" fontSize={12} tickLine={false} />
+                  <YAxis stroke="#6b7280" fontSize={12} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#121626',
+                      borderColor: '#8b5cf6',
+                      borderRadius: '12px',
+                      color: '#fff',
+                    }}
+                  />
+                  <Area type="monotone" dataKey="hacim" name="Ticari Hacim (₺)" stroke="#8b5cf6" strokeWidth={3} fill="url(#areaColor)" />
+                </AreaChart>
+              ) : chartType === 'line' ? (
+                <LineChart data={data?.dailyTrend || []}>
+                  <XAxis dataKey="date" stroke="#6b7280" fontSize={12} tickLine={false} />
+                  <YAxis stroke="#6b7280" fontSize={12} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#121626',
+                      borderColor: '#10b981',
+                      borderRadius: '12px',
+                      color: '#fff',
+                    }}
+                  />
+                  <Line type="monotone" dataKey="fişSayısı" name="Fiş Adedi" stroke="#10b981" strokeWidth={3} dot={{ r: 5 }} />
+                </LineChart>
+              ) : chartType === 'bar' ? (
+                <BarChart data={data?.topProducts || []}>
+                  <XAxis dataKey="itemName" stroke="#6b7280" fontSize={11} tickLine={false} />
+                  <YAxis stroke="#6b7280" fontSize={11} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#121626',
+                      borderColor: '#3b82f6',
+                      borderRadius: '12px',
+                      color: '#fff',
+                    }}
+                  />
+                  <Bar dataKey="adet" name="Okutulma Adedi" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              ) : (
+                <PieChart>
+                  <Pie
+                    data={data?.categoryAnalytics || []}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={70}
+                    outerRadius={100}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {(data?.categoryAnalytics || []).map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#121626',
+                      borderColor: '#ec4899',
+                      borderRadius: '12px',
+                      color: '#fff',
+                    }}
+                    formatter={(val: any) => `₺${Number(val).toFixed(2)}`}
+                  />
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                </PieChart>
+              )}
+            </ResponsiveContainer>
           </div>
         </div>
       </main>
