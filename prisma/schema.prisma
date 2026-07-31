@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ReceiptStatus {
+  PENDING
+  PROCESSED
+  REJECTED
+  DUPLICATE
+}
+
+enum TransactionType {
+  CASHBACK_REWARD
+  WITHDRAWAL
+  ADJUSTMENT
+}
+
+model Receipt {
+  id             String        @id @default(cuid())
+  userId         String
+  receiptHash    String        @unique @map("receipt_hash")
+  imageUrl       String        @map("image_url")
+  vkn            String?       @db.VarChar(10)
+  receiptNo      String?       @map("receipt_no")
+  receiptDate    DateTime?     @map("receipt_date")
+  totalAmount    Decimal       @map("total_amount") @db.Decimal(10, 2)
+  cashbackAmount Decimal       @map("cashback_amount") @db.Decimal(10, 2)
+  status         ReceiptStatus @default(PENDING)
+  rawOcrText     String?       @map("raw_ocr_text") @db.Text
+  ocrEngineUsed  String?       @map("ocr_engine_used")
+  fallbackUsed   Boolean       @default(false) @map("fallback_used")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  transactions WalletTransaction[]
+
+  @@index([userId])
+  @@map("receipts")
+}
+
+model Wallet {
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  balance   Decimal  @default(0.00) @db.Decimal(10, 2)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  transactions WalletTransaction[]
+
+  @@map("wallets")
+}
+
+model WalletTransaction {
+  id              String          @id @default(cuid())
+  walletId        String          @map("wallet_id")
+  receiptId       String?         @map("receipt_id")
+  amount          Decimal         @db.Decimal(10, 2)
+  transactionType TransactionType @map("transaction_type")
+  description     String?
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  wallet  Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  receipt Receipt? @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+
+  @@map("wallet_transactions")
+}
