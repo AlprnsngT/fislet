@@ -21,7 +21,43 @@ export async function GET(req: NextRequest) {
     const totalCashbackPaid = Number(totalAmountAgg._sum.cashbackAmount || 0);
     const avgBasketSize = processedReceiptsCount > 0 ? totalVolume / processedReceiptsCount : 0;
 
-    // 2. Category Share Analytics (Pazarlama Kategori Dağılımı)
+    // 2. Daily Scan Trend (Son 7 Günlük Dinamik Fiş Okutma Trend Çizgi Grafiği)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+
+    const dailyScansRaw = await prisma.receipt.groupBy({
+      by: ['createdAt'],
+      _count: { id: true },
+      _sum: { totalAmount: true },
+      where: { createdAt: { gte: sevenDaysAgo } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Grouping by Date String (YYYY-MM-DD)
+    const dailyTrendMap = new Map<string, { count: number; volume: number }>();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      const dateKey = d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' });
+      dailyTrendMap.set(dateKey, { count: 0, volume: 0 });
+    }
+
+    dailyScansRaw.forEach((scan) => {
+      const dateKey = new Date(scan.createdAt).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' });
+      const current = dailyTrendMap.get(dateKey) || { count: 0, volume: 0 };
+      dailyTrendMap.set(dateKey, {
+        count: current.count + scan._count.id,
+        volume: current.volume + Number(scan._sum.totalAmount || 0),
+      });
+    });
+
+    const dailyTrend = Array.from(dailyTrendMap.entries()).map(([date, data]) => ({
+      date,
+      fişSayısı: data.count,
+      hacim: data.volume,
+    }));
+
+    // 3. Category Share Analytics (Daire Grafiği İçin Kategori Dağılımı)
     const categoryStatsRaw = await prisma.receiptItem.groupBy({
       by: ['categoryId'],
       _sum: { totalPrice: true, quantity: true },
@@ -32,27 +68,26 @@ export async function GET(req: NextRequest) {
     const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
 
     const categoryAnalytics = categoryStatsRaw.map((stat) => ({
-      categoryName: stat.categoryId ? categoryMap.get(stat.categoryId) || 'Diğer' : 'Genel',
-      totalSpent: Number(stat._sum.totalPrice || 0),
-      totalQuantity: Number(stat._sum.quantity || 0),
-      itemCount: stat._count.id,
+      name: stat.categoryId ? categoryMap.get(stat.categoryId) || 'Diğer' : 'Genel',
+      value: Number(stat._sum.totalPrice || 0),
+      quantity: Number(stat._sum.quantity || 0),
     }));
 
-    // 3. Top Products Analytics (En Çok Satılan / Okutulan Ürün Trendleri)
+    // 4. Top Products Analytics (En Çok Satılan Ürünler Çubuk Grafiği)
     const topProductsRaw = await prisma.receiptItem.groupBy({
       by: ['itemName'],
       _sum: { quantity: true, totalPrice: true },
       orderBy: { _sum: { quantity: 'desc' } },
-      take: 10,
+      take: 7,
     });
 
     const topProducts = topProductsRaw.map((p) => ({
       itemName: p.itemName,
-      totalQuantity: Number(p._sum.quantity || 0),
-      totalRevenue: Number(p._sum.totalPrice || 0),
+      adet: Number(p._sum.quantity || 0),
+      tutar: Number(p._sum.totalPrice || 0),
     }));
 
-    // 4. Merchant Market Share (Market / Mağaza Pazar Payı)
+    // 5. Merchant Market Share (Mağaza Pazar Payı)
     const merchantShareRaw = await prisma.receipt.groupBy({
       by: ['merchantName'],
       where: { status: 'PROCESSED' },
@@ -63,18 +98,18 @@ export async function GET(req: NextRequest) {
     });
 
     const merchantShare = merchantShareRaw.map((m) => ({
-      merchantName: m.merchantName || 'Bilinmeyen Mağaza',
-      receiptCount: m._count.id,
-      totalVolume: Number(m._sum.totalAmount || 0),
+      name: m.merchantName || 'Bilinmeyen Mağaza',
+      fişSayısı: m._count.id,
+      hacim: Number(m._sum.totalAmount || 0),
     }));
 
-    // 5. Recent System Logs for Admin Audit
+    // 6. Recent Audit Logs
     const recentReceipts = await prisma.receipt.findMany({
-      take: 10,
+      take: 6,
       orderBy: { createdAt: 'desc' },
       include: {
-        user: { select: { name: true, username: true, email: true } },
-        items: { include: { category: true } },
+        user: { select: { name: true, username: true } },
+        items: true,
       },
     });
 
@@ -89,6 +124,7 @@ export async function GET(req: NextRequest) {
         totalCashbackPaid,
         avgBasketSize,
       },
+      dailyTrend,
       categoryAnalytics,
       topProducts,
       merchantShare,

@@ -14,8 +14,23 @@ import {
   ShieldCheck,
   RefreshCw,
   BarChart3,
-  Search,
+  LineChart as LineChartIcon,
+  Award,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  Legend,
+} from 'recharts';
 import { useAuthStore } from '@/shared/stores/auth_store';
 
 interface AnalyticsData {
@@ -28,21 +43,25 @@ interface AnalyticsData {
     totalCashbackPaid: number;
     avgBasketSize: number;
   };
+  dailyTrend: Array<{
+    date: string;
+    fişSayısı: number;
+    hacim: number;
+  }>;
   categoryAnalytics: Array<{
-    categoryName: string;
-    totalSpent: number;
-    totalQuantity: number;
-    itemCount: number;
+    name: string;
+    value: number;
+    quantity: number;
   }>;
   topProducts: Array<{
     itemName: string;
-    totalQuantity: number;
-    totalRevenue: number;
+    adet: number;
+    tutar: number;
   }>;
   merchantShare: Array<{
-    merchantName: string;
-    receiptCount: number;
-    totalVolume: number;
+    name: string;
+    fişSayısı: number;
+    hacim: number;
   }>;
   recentReceipts: Array<{
     id: string;
@@ -55,6 +74,8 @@ interface AnalyticsData {
     itemsCount: number;
   }>;
 }
+
+const COLORS = ['#10b981', '#8b5cf6', '#3b82f6', '#f59e0b', '#ec4899', '#14b8a6'];
 
 export const AdminDashboardView: React.FC = () => {
   const { user, logout } = useAuthStore();
@@ -81,7 +102,7 @@ export const AdminDashboardView: React.FC = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#070a12] text-gray-100 font-sans pb-16">
+    <div className="min-h-screen bg-[#070a12] text-gray-100 font-sans pb-20">
       {/* Top Admin Header */}
       <header className="sticky top-0 z-30 bg-[#0c101d]/90 backdrop-blur-md border-b border-purple-500/20 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -95,11 +116,11 @@ export const AdminDashboardView: React.FC = () => {
                   B2B PAZARLAMA & VERİ ANALİTİĞİ
                 </h1>
                 <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-bold border border-purple-500/40">
-                  ADMIN PANELİ
+                  ADMIN LIVE DASHBOARD
                 </span>
               </div>
               <p className="text-xs text-gray-400">
-                Pazarlama şirketleri için canlı tüketici davranışları & ürün trend analizi
+                Veritabanından çekilen canlı tüketici eğilimleri & grafiksel pazar analizleri
               </p>
             </div>
           </div>
@@ -131,26 +152,29 @@ export const AdminDashboardView: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-6 pt-8 space-y-8">
         {/* KPI Stat Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            className="glass-card p-5 rounded-2xl border border-purple-500/20 bg-gradient-to-br from-[#121626] to-[#0c101d]"
+            className="glass-card p-6 rounded-2xl border border-purple-500/20 bg-gradient-to-br from-[#121626] to-[#0c101d] shadow-xl relative overflow-hidden"
           >
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <FileCheck className="w-24 h-24 text-purple-400" />
+            </div>
             <div className="flex items-center justify-between text-gray-400 mb-2">
-              <span className="text-xs font-semibold">Toplam Okutulan Fiş</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-purple-300">Toplam Fiş Taraması</span>
               <FileCheck className="w-5 h-5 text-purple-400" />
             </div>
-            <div className="text-2xl font-black text-white">
+            <div className="text-3xl font-black text-white">
               {data?.metrics.totalReceiptsCount || 0}
             </div>
-            <div className="text-[11px] text-emerald-400 mt-1 flex items-center space-x-1">
-              <span>Onaylanan: {data?.metrics.processedReceiptsCount || 0}</span>
+            <div className="text-xs text-gray-400 mt-2 flex items-center space-x-2">
+              <span className="text-emerald-400 font-bold">✓ {data?.metrics.processedReceiptsCount || 0} Onay</span>
               <span>•</span>
-              <span className="text-red-400">Red: {data?.metrics.rejectedReceiptsCount || 0}</span>
+              <span className="text-red-400 font-bold">✕ {data?.metrics.rejectedReceiptsCount || 0} Red</span>
             </div>
           </motion.div>
 
@@ -158,17 +182,20 @@ export const AdminDashboardView: React.FC = () => {
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05 }}
-            className="glass-card p-5 rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-[#121626] to-[#0c101d]"
+            className="glass-card p-6 rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-[#121626] to-[#0c101d] shadow-xl relative overflow-hidden"
           >
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <DollarSign className="w-24 h-24 text-emerald-400" />
+            </div>
             <div className="flex items-center justify-between text-gray-400 mb-2">
-              <span className="text-xs font-semibold">Toplam Ticari Hacim</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-300">Ticari Hacim</span>
               <DollarSign className="w-5 h-5 text-emerald-400" />
             </div>
-            <div className="text-2xl font-black text-emerald-400">
+            <div className="text-3xl font-black text-emerald-400">
               ₺{data?.metrics.totalVolume.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) || '0,00'}
             </div>
-            <div className="text-[11px] text-gray-400 mt-1">
-              Dağıtılan Cashback: ₺{data?.metrics.totalCashbackPaid.toFixed(2) || '0,00'}
+            <div className="text-xs text-gray-400 mt-2">
+              Ödenen İade: <span className="text-emerald-300 font-bold">₺{data?.metrics.totalCashbackPaid.toFixed(2) || '0,00'}</span>
             </div>
           </motion.div>
 
@@ -176,139 +203,204 @@ export const AdminDashboardView: React.FC = () => {
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="glass-card p-5 rounded-2xl border border-blue-500/20 bg-gradient-to-br from-[#121626] to-[#0c101d]"
+            className="glass-card p-6 rounded-2xl border border-blue-500/20 bg-gradient-to-br from-[#121626] to-[#0c101d] shadow-xl relative overflow-hidden"
           >
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <ShoppingBag className="w-24 h-24 text-blue-400" />
+            </div>
             <div className="flex items-center justify-between text-gray-400 mb-2">
-              <span className="text-xs font-semibold">Ortalama Sepet Tutarı (AOV)</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-blue-300">Ortalama Sepet (AOV)</span>
               <ShoppingBag className="w-5 h-5 text-blue-400" />
             </div>
-            <div className="text-2xl font-black text-blue-400">
+            <div className="text-3xl font-black text-blue-400">
               ₺{data?.metrics.avgBasketSize.toFixed(2) || '0,00'}
             </div>
-            <div className="text-[11px] text-gray-400 mt-1">Fiş başına düşen ortalama harcama</div>
+            <div className="text-xs text-gray-400 mt-2">Fiş başına ortalama tüketici harcaması</div>
           </motion.div>
 
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 }}
-            className="glass-card p-5 rounded-2xl border border-amber-500/20 bg-gradient-to-br from-[#121626] to-[#0c101d]"
+            className="glass-card p-6 rounded-2xl border border-amber-500/20 bg-gradient-to-br from-[#121626] to-[#0c101d] shadow-xl relative overflow-hidden"
           >
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <Users className="w-24 h-24 text-amber-400" />
+            </div>
             <div className="flex items-center justify-between text-gray-400 mb-2">
-              <span className="text-xs font-semibold">Aktif Tüketici Sayısı</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-amber-300">Aktif Müşteri Hacmi</span>
               <Users className="w-5 h-5 text-amber-400" />
             </div>
-            <div className="text-2xl font-black text-amber-400">
+            <div className="text-3xl font-black text-amber-400">
               {data?.metrics.totalUsersCount || 0}
             </div>
-            <div className="text-[11px] text-gray-400 mt-1">Sistemde fiş yükleyen tekil kullanıcı</div>
+            <div className="text-xs text-gray-400 mt-2">Sistemde fiş okutan tekil kullanıcı</div>
           </motion.div>
         </div>
 
-        {/* Analytics Section 1: Top Products & Category Breakdown */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Top Selling Products (Ürün Trendleri) */}
-          <div className="glass-card p-6 rounded-2xl border border-purple-500/20 bg-[#0c101d]">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-2">
-                <BarChart3 className="w-5 h-5 text-purple-400" />
-                <h3 className="text-lg font-bold text-white">Top Ürün Satış Trendleri</h3>
+        {/* SECTION 1: Dynamic Line Chart (Günlük Fiş Okutma Trend Grafiği) */}
+        <div className="glass-card p-6 rounded-2xl border border-purple-500/20 bg-[#0c101d] shadow-2xl">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/30">
+                <LineChartIcon className="w-5 h-5" />
               </div>
-              <span className="text-xs text-gray-400">Pazarlama Verisi</span>
+              <div>
+                <h3 className="text-lg font-bold text-white">Zaman Bazlı Fiş Okuma & Hacim Trendi</h3>
+                <p className="text-xs text-gray-400">Pazarlama analizi için son 7 günlük canlı hacim grafik eğrisi</p>
+              </div>
+            </div>
+            <span className="px-3 py-1 rounded-full bg-purple-500/10 text-purple-300 text-xs font-semibold border border-purple-500/30">
+              Çizgi Grafik (Line Chart)
+            </span>
+          </div>
+
+          <div className="h-72 w-full pt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={data?.dailyTrend || []}>
+                <defs>
+                  <linearGradient id="colorHacim" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="date" stroke="#6b7280" fontSize={12} tickLine={false} />
+                <YAxis stroke="#6b7280" fontSize={12} tickLine={false} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#121626',
+                    borderColor: '#8b5cf6',
+                    borderRadius: '12px',
+                    color: '#fff',
+                  }}
+                />
+                <Area type="monotone" dataKey="hacim" stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorHacim)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* SECTION 2: Pie Chart & Bar Chart Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Pie Chart: Kategori Dağılımı */}
+          <div className="glass-card p-6 rounded-2xl border border-emerald-500/20 bg-[#0c101d] shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                  <PieIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Kategori Bazlı Harcama Dağılımı</h3>
+                  <p className="text-xs text-gray-400">Ürün kategorilerine göre harcama yüzdeleri</p>
+                </div>
+              </div>
+              <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs font-semibold border border-emerald-500/30">
+                Daire Grafik (Pie Chart)
+              </span>
             </div>
 
-            <div className="space-y-4">
-              {data?.topProducts && data.topProducts.length > 0 ? (
-                data.topProducts.map((prod, index) => (
-                  <div
-                    key={prod.itemName}
-                    className="flex items-center justify-between p-3 rounded-xl bg-gray-900/60 border border-gray-800/60 hover:border-purple-500/30 transition-colors"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="w-7 h-7 rounded-lg bg-purple-500/10 text-purple-400 font-bold text-xs flex items-center justify-center border border-purple-500/30">
-                        #{index + 1}
-                      </div>
-                      <div>
-                        <div className="text-sm font-bold text-gray-200">{prod.itemName}</div>
-                        <div className="text-xs text-gray-400">Toplam Hacim: ₺{prod.totalRevenue.toFixed(2)}</div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="inline-block px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold text-xs">
-                        {prod.totalQuantity} Adet Okutuldu
-                      </span>
-                    </div>
-                  </div>
-                ))
+            <div className="h-64 w-full flex items-center justify-center">
+              {data?.categoryAnalytics && data.categoryAnalytics.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={data.categoryAnalytics}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={90}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {data.categoryAnalytics.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#121626',
+                        borderColor: '#10b981',
+                        borderRadius: '12px',
+                        color: '#fff',
+                      }}
+                      formatter={(val: any) => `₺${Number(val).toFixed(2)}`}
+                    />
+                    <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                  </PieChart>
+                </ResponsiveContainer>
               ) : (
-                <div className="text-center py-8 text-gray-500 text-sm">Ürün verisi henüz oluşmadı.</div>
+                <div className="text-gray-500 text-sm">Kategori verisi bulunamadı.</div>
               )}
             </div>
           </div>
 
-          {/* Category Share Breakdown */}
-          <div className="glass-card p-6 rounded-2xl border border-emerald-500/20 bg-[#0c101d]">
+          {/* Bar Chart: En Çok Satılan Ürün Trendleri */}
+          <div className="glass-card p-6 rounded-2xl border border-blue-500/20 bg-[#0c101d] shadow-2xl">
             <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-2">
-                <PieIcon className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-lg font-bold text-white">Kategori Harcama Dağılımı</h3>
+              <div className="flex items-center space-x-3">
+                <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/30">
+                  <BarChart3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Top Satış Yapan Ürünler</h3>
+                  <p className="text-xs text-gray-400">En çok tercih edilen markalar ve ürün adetleri</p>
+                </div>
               </div>
-              <span className="text-xs text-gray-400">Sektörel Pazar</span>
+              <span className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-300 text-xs font-semibold border border-blue-500/30">
+                Çubuk Grafik (Bar Chart)
+              </span>
             </div>
 
-            <div className="space-y-4">
-              {data?.categoryAnalytics && data.categoryAnalytics.length > 0 ? (
-                data.categoryAnalytics.map((cat) => (
-                  <div key={cat.categoryName} className="p-3.5 rounded-xl bg-gray-900/60 border border-gray-800">
-                    <div className="flex justify-between items-center text-xs mb-1.5">
-                      <span className="font-bold text-gray-200">{cat.categoryName}</span>
-                      <span className="font-bold text-emerald-400">₺{cat.totalSpent.toFixed(2)}</span>
-                    </div>
-                    <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="bg-gradient-to-r from-emerald-500 to-teal-400 h-2 rounded-full"
-                        style={{
-                          width: `${Math.min(
-                            100,
-                            (cat.totalSpent / (data.metrics.totalVolume || 1)) * 100
-                          )}%`,
-                        }}
-                      />
-                    </div>
-                    <div className="flex justify-between text-[10px] text-gray-500 mt-1">
-                      <span>Satılan Adet: {cat.totalQuantity}</span>
-                      <span>Fiş İçi Kalem: {cat.itemCount}</span>
-                    </div>
-                  </div>
-                ))
+            <div className="h-64 w-full">
+              {data?.topProducts && data.topProducts.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data.topProducts}>
+                    <XAxis dataKey="itemName" stroke="#6b7280" fontSize={11} tickLine={false} />
+                    <YAxis stroke="#6b7280" fontSize={11} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#121626',
+                        borderColor: '#3b82f6',
+                        borderRadius: '12px',
+                        color: '#fff',
+                      }}
+                    />
+                    <Bar dataKey="adet" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               ) : (
-                <div className="text-center py-8 text-gray-500 text-sm">Kategori verisi henüz oluşmadı.</div>
+                <div className="text-gray-500 text-sm flex items-center justify-center h-full">Ürün verisi bulunamadı.</div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Merchant Market Share */}
+        {/* SECTION 3: Merchant Share Cards */}
         <div className="glass-card p-6 rounded-2xl border border-gray-800 bg-[#0c101d]">
-          <div className="flex items-center space-x-2 mb-6">
-            <Building2 className="w-5 h-5 text-amber-400" />
-            <h3 className="text-lg font-bold text-white">Zincir Market & Mağaza Pazar Payları</h3>
+          <div className="flex items-center space-x-3 mb-6">
+            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/30">
+              <Building2 className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white">Pazar Payına Göre Mağaza Kırılımı</h3>
+              <p className="text-xs text-gray-400">Fiş okutulan zincir marketlerin ticari hacimleri</p>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {data?.merchantShare && data.merchantShare.length > 0 ? (
               data.merchantShare.map((merch) => (
                 <div
-                  key={merch.merchantName}
-                  className="p-4 rounded-xl bg-gray-900/80 border border-gray-800 flex items-center justify-between"
+                  key={merch.name}
+                  className="p-4 rounded-xl bg-gray-900/80 border border-gray-800 flex items-center justify-between hover:border-amber-500/30 transition-colors"
                 >
                   <div>
-                    <div className="text-sm font-bold text-white">{merch.merchantName}</div>
-                    <div className="text-xs text-gray-400">{merch.receiptCount} Fiş Okutuldu</div>
+                    <div className="text-sm font-bold text-white">{merch.name}</div>
+                    <div className="text-xs text-gray-400">{merch.fişSayısı} İşlenmiş Fiş</div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-extrabold text-amber-400">
-                      ₺{merch.totalVolume.toFixed(2)}
+                      ₺{merch.hacim.toFixed(2)}
                     </div>
                     <div className="text-[10px] text-gray-500">Pazar Hacmi</div>
                   </div>
