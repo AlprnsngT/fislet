@@ -7,6 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  USER
+  ADMIN
+}
+
 enum ReceiptStatus {
   PENDING
   PROCESSED
@@ -23,8 +28,10 @@ enum TransactionType {
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
+  username  String   @unique
   name      String
   password  String
+  role      Role     @default(USER)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -34,12 +41,23 @@ model User {
   @@map("users")
 }
 
+model Category {
+  id        String        @id @default(cuid())
+  name      String        @unique
+  slug      String        @unique
+  items     ReceiptItem[]
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  @@map("categories")
+}
+
 model Receipt {
   id             String        @id @default(cuid())
   userId         String        @map("user_id")
   receiptHash    String        @unique @map("receipt_hash")
   imageUrl       String        @map("image_url")
   vkn            String?       @db.VarChar(10)
+  merchantName   String?       @map("merchant_name")
   receiptNo      String?       @map("receipt_no")
   receiptDate    DateTime?     @map("receipt_date")
   totalAmount    Decimal       @map("total_amount") @db.Decimal(10, 2)
@@ -52,10 +70,27 @@ model Receipt {
   updatedAt      DateTime      @updatedAt @map("updated_at")
 
   user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items        ReceiptItem[]
   transactions WalletTransaction[]
 
   @@index([userId])
   @@map("receipts")
+}
+
+model ReceiptItem {
+  id         String   @id @default(cuid())
+  receiptId  String   @map("receipt_id")
+  categoryId String?  @map("category_id")
+  itemName   String   @map("item_name")
+  quantity   Int      @default(1)
+  unitPrice  Decimal  @map("unit_price") @db.Decimal(10, 2)
+  totalPrice Decimal  @map("total_price") @db.Decimal(10, 2)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  receipt  Receipt   @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@map("receipt_items")
 }
 
 model Wallet {

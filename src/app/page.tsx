@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '@/shared/stores/auth_store';
 import { LandingView } from '@/components/landing/landing_view';
 import { DashboardView } from '@/components/dashboard/dashboard_view';
+import { AdminDashboardView } from '@/components/admin/admin_dashboard';
 import { AuthModal } from '@/components/auth/auth_modal';
 
 export default function Home() {
@@ -25,7 +26,15 @@ export default function Home() {
 
   return (
     <>
-      {user ? <DashboardView /> : <LandingView />}
+      {user ? (
+        user.role === 'ADMIN' ? (
+          <AdminDashboardView />
+        ) : (
+          <DashboardView />
+        )
+      ) : (
+        <LandingView />
+      )}
       <AuthModal />
     </>
   );

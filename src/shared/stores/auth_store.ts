@@ -3,7 +3,9 @@ import { create } from 'zustand';
 export interface UserSession {
   id: string;
   name: string;
+  username: string;
   email: string;
+  role: 'USER' | 'ADMIN';
 }
 
 interface AuthState {

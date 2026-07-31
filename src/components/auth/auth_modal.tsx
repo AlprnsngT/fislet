@@ -2,21 +2,20 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mail, Lock, User, LogIn, UserPlus, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Mail, Lock, User, LogIn, UserPlus, AlertCircle, Loader2, AtSign } from 'lucide-react';
 import { useAuthStore } from '@/shared/stores/auth_store';
 
 export const AuthModal: React.FC = () => {
   const { isAuthModalOpen, activeTab, closeAuthModal, setUser } = useAuthStore();
   const [tab, setTab] = useState<'login' | 'register'>(activeTab);
 
+  const [identifier, setIdentifier] = useState('');
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Sync tab state when modal opens
   React.useEffect(() => {
     setTab(activeTab);
     setErrorMessage(null);
@@ -30,7 +29,9 @@ export const AuthModal: React.FC = () => {
     setErrorMessage(null);
 
     const endpoint = tab === 'login' ? '/api/v1/auth/login' : '/api/v1/auth/register';
-    const payload = tab === 'login' ? { email, password } : { name, email, password };
+    const payload = tab === 'login' 
+      ? { identifier, password } 
+      : { identifier, name, password };
 
     try {
       const res = await fetch(endpoint, {
@@ -110,12 +111,11 @@ export const AuthModal: React.FC = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             {tab === 'register' && (
               <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">Ad Soyad</label>
+                <label className="block text-xs font-semibold text-gray-300 mb-1">Ad Soyad (Opsiyonel)</label>
                 <div className="relative">
                   <User className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
                   <input
                     type="text"
-                    required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Ahmet Yılmaz"
@@ -126,18 +126,23 @@ export const AuthModal: React.FC = () => {
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1">E-Posta Adresi</label>
+              <label className="block text-xs font-semibold text-gray-300 mb-1">
+                Kullanıcı Adı veya E-Posta
+              </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
+                <AtSign className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
                 <input
-                  type="email"
+                  type="text"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="ornek@email.com"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder="kullanici_adi veya ornek@email.com"
                   className="w-full bg-gray-900/90 border border-gray-800 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
                 />
               </div>
+              <p className="text-[10px] text-gray-500 mt-1">
+                * İçinde '@' varsa e-posta, yoksa kullanıcı adı olarak algılanır.
+              </p>
             </div>
 
             <div>
@@ -170,7 +175,7 @@ export const AuthModal: React.FC = () => {
               ) : (
                 <>
                   <UserPlus className="w-4 h-4" />
-                  <span>Kayıt Ol & Hesabı Aç</span>
+                  <span>Kayıt Ol & Başla</span>
                 </>
               )}
             </button>

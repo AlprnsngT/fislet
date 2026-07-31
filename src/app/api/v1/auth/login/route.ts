@@ -12,21 +12,29 @@ function hashPassword(password: string): string {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, password } = body;
+    const { identifier, email, password } = body;
 
-    if (!email || !password) {
-      return NextResponse.json({ error: 'E-posta ve şifre zorunludur' }, { status: 400 });
+    const rawInput = (identifier || email || '').trim();
+    const rawPassword = (password || '').trim();
+
+    if (!rawInput || !rawPassword) {
+      return NextResponse.json({ error: 'Kullanıcı adı / E-posta ve şifre zorunludur' }, { status: 400 });
     }
 
-    const sanitizedEmail = email.trim().toLowerCase();
-    const hashedPassword = hashPassword(password);
+    const hashedPassword = hashPassword(rawPassword);
+    const sanitizedInput = rawInput.toLowerCase();
 
-    const user = await prisma.user.findUnique({
-      where: { email: sanitizedEmail },
+    // Check if input contains '@' (email) or is a username
+    const isEmail = sanitizedInput.includes('@');
+
+    const user = await prisma.user.findFirst({
+      where: isEmail
+        ? { email: sanitizedInput }
+        : { OR: [{ username: sanitizedInput }, { email: sanitizedInput }] },
     });
 
     if (!user || user.password !== hashedPassword) {
-      return NextResponse.json({ error: 'E-posta adresi veya şifre hatalı' }, { status: 401 });
+      return NextResponse.json({ error: 'Kullanıcı adı/e-posta adresi veya şifre hatalı' }, { status: 401 });
     }
 
     return NextResponse.json({
@@ -34,7 +42,9 @@ export async function POST(req: NextRequest) {
       user: {
         id: user.id,
         name: user.name,
+        username: user.username,
         email: user.email,
+        role: user.role,
       },
     });
   } catch (error: any) {

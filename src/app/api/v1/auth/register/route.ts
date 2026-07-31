@@ -12,32 +12,45 @@ function hashPassword(password: string): string {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, email, password } = body;
+    const { identifier, name, email, password } = body;
 
-    if (!name || !email || !password) {
-      return NextResponse.json({ error: 'Ad Soyad, E-posta ve şifre zorunludur' }, { status: 400 });
+    // Determine input value (identifier or name/email)
+    const rawInput = (identifier || email || name || '').trim();
+    const rawPassword = (password || '').trim();
+
+    if (!rawInput || !rawPassword) {
+      return NextResponse.json({ error: 'Kullanıcı adı / E-posta ve şifre zorunludur' }, { status: 400 });
     }
 
-    const sanitizedEmail = email.trim().toLowerCase();
+    const isEmail = rawInput.includes('@');
+    const userEmail = isEmail ? rawInput.toLowerCase() : `${rawInput.toLowerCase()}@fisokut.local`;
+    const username = isEmail ? rawInput.split('@')[0].toLowerCase() : rawInput.toLowerCase();
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: sanitizedEmail },
+    // Check if user already exists by email or username
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: userEmail },
+          { username: username },
+        ],
+      },
     });
 
     if (existingUser) {
-      return NextResponse.json({ error: 'Bu e-posta adresi ile zaten kayıtlı bir hesap var' }, { status: 400 });
+      return NextResponse.json({ error: 'Bu kullanıcı adı veya e-posta ile zaten bir hesap var' }, { status: 400 });
     }
 
-    const hashedPassword = hashPassword(password);
+    const hashedPassword = hashPassword(rawPassword);
 
-    // Create user and wallet in a single transaction
+    // Create user and wallet atomically
     const newUser = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
-          name: name.trim(),
-          email: sanitizedEmail,
+          name: name ? name.trim() : username,
+          username: username,
+          email: userEmail,
           password: hashedPassword,
+          role: username === 'admin' ? 'ADMIN' : 'USER',
         },
       });
 
@@ -56,11 +69,13 @@ export async function POST(req: NextRequest) {
       user: {
         id: newUser.id,
         name: newUser.name,
+        username: newUser.username,
         email: newUser.email,
+        role: newUser.role,
       },
     });
   } catch (error: any) {
     console.error('Registration error:', error);
-    return NextResponse.json({ error: 'Kayıt sırasında bir sunucu hatası oluştu' }, { status: 500 });
+    return NextResponse.json({ error: 'Kayıt sırasında bir hata oluştu' }, { status: 500 });
   }
 }
