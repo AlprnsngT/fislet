@@ -20,9 +20,23 @@ enum TransactionType {
   ADJUSTMENT
 }
 
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  wallet   Wallet?
+  receipts Receipt[]
+
+  @@map("users")
+}
+
 model Receipt {
   id             String        @id @default(cuid())
-  userId         String
+  userId         String        @map("user_id")
   receiptHash    String        @unique @map("receipt_hash")
   imageUrl       String        @map("image_url")
   vkn            String?       @db.VarChar(10)
@@ -37,6 +51,7 @@ model Receipt {
   createdAt      DateTime      @default(now()) @map("created_at")
   updatedAt      DateTime      @updatedAt @map("updated_at")
 
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions WalletTransaction[]
 
   @@index([userId])
@@ -49,6 +64,7 @@ model Wallet {
   balance   Decimal  @default(0.00) @db.Decimal(10, 2)
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions WalletTransaction[]
 
   @@map("wallets")

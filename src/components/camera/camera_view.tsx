@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useRef, useState, useCallback } from 'react';
-import { Camera, RefreshCw, UploadCloud, CheckCircle2, AlertCircle } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
+import { Camera, RefreshCw, UploadCloud, CheckCircle2, AlertCircle, FileUp, Image as ImageIcon } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface CameraViewProps {
   userId: string;
@@ -11,33 +11,46 @@ interface CameraViewProps {
 
 export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [isStreaming, setIsStreaming] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
 
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-        setIsStreaming(true);
-        setStatusMessage(null);
-      }
-    } catch (err) {
-      console.error('Camera access error:', err);
-      setStatusMessage('Kamera erişimi sağlanamadı. Lütfen izin verin veya dosya yüklemeyi deneyin.');
-    }
-  };
-
-  const stopCamera = () => {
+  const stopCamera = useCallback(() => {
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach((track) => track.stop());
+      videoRef.current.srcObject = null;
       setIsStreaming(false);
+    }
+  }, []);
+
+  const startCamera = async () => {
+    setErrorMessage(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+        audio: false,
+      });
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        // Ensure play is called and playsInline attribute is present
+        await videoRef.current.play();
+        setIsStreaming(true);
+        setStatusMessage(null);
+      }
+    } catch (err: any) {
+      console.error('Camera access error:', err);
+      setIsStreaming(false);
+      setErrorMessage('Kamera erişimi sağlanamadı veya kamera bulunamadı. Lütfen "Dosya Yükle" butonunu kullanın.');
     }
   };
 
@@ -54,7 +67,21 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
       setCapturedImage(dataUrl);
       stopCamera();
     }
-  }, []);
+  }, [stopCamera]);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setCapturedImage(event.target.result as string);
+          setErrorMessage(null);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleUploadAndProcess = async () => {
     if (!capturedImage) return;
@@ -63,7 +90,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
     setStatusMessage('Cloudflare R2 Yükleme URL\'si alınıyor...');
 
     try {
-      // 1. Get Presigned Upload URL
+      // 1. Request Presigned Upload URL
       const presignedRes = await fetch('/api/v1/receipts/upload-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -71,11 +98,11 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
       });
 
       const presignedData = await presignedRes.json();
-      if (!presignedRes.ok) throw new Error(presignedData.error || 'Presigned URL hatası');
+      if (!presignedRes.ok) throw new Error(presignedData.error || 'Upload URL hatası');
 
-      setStatusMessage('Fiş görseli güvenli depolamaya aktarılıyor...');
+      setStatusMessage('Fiş görseli R2 depolama alanına aktarılıyor...');
 
-      // 2. Enqueue for hybrid OCR processing
+      // 2. Enqueue for processing
       const processRes = await fetch('/api/v1/receipts/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -85,7 +112,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
       const processData = await processRes.json();
       if (!processRes.ok) throw new Error(processData.error || 'İşleme hatası');
 
-      setStatusMessage('Fiş kuyruğa alındı! OCR işleniyor...');
+      setStatusMessage('Fiş başarıyla kuyruğa alındı! OCR işleniyor...');
       onScanComplete(processData);
     } catch (err: any) {
       console.error(err);
@@ -95,35 +122,78 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
     }
   };
 
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, [stopCamera]);
+
   return (
     <div className="w-full max-w-md mx-auto p-4 flex flex-col items-center">
-      <div className="relative w-full aspect-[3/4] rounded-2xl overflow-hidden glass-card flex flex-col items-center justify-center border border-emerald-500/20">
+      {/* Hidden File Input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept="image/*"
+        onChange={handleFileUpload}
+        className="hidden"
+      />
+
+      <div className="relative w-full aspect-[3/4] rounded-2xl overflow-hidden glass-card flex flex-col items-center justify-center border border-emerald-500/20 shadow-xl">
         {!isStreaming && !capturedImage && (
           <div className="flex flex-col items-center justify-center p-6 text-center space-y-4">
             <div className="w-20 h-20 rounded-full bg-emerald-500/10 flex items-center justify-center border border-emerald-500/30">
-              <Camera className="w-10 h-10 text-emerald-400 animate-pulse" />
+              <Camera className="w-10 h-10 text-emerald-400" />
             </div>
-            <h3 className="text-xl font-bold text-white">Fişinizi Tarayın</h3>
-            <p className="text-sm text-gray-400">Fişinizi hizalama alanının içine yerleştirip net bir fotoğraf çekin.</p>
-            <button onClick={startCamera} className="glass-button px-6 py-3 rounded-xl font-semibold text-white flex items-center space-x-2">
-              <Camera className="w-5 h-5" />
-              <span>Kamerayı Aç</span>
-            </button>
+            
+            <h3 className="text-xl font-bold text-white">Fişinizi Tara & İade Al</h3>
+            <p className="text-xs text-gray-400 max-w-xs">
+              Kameranızla fişinizi anında tarayın veya galerinizden fiş görselini seçin.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs pt-2">
+              <button
+                onClick={startCamera}
+                className="flex-1 glass-button py-3 rounded-xl font-semibold text-xs text-white flex items-center justify-center space-x-2"
+              >
+                <Camera className="w-4 h-4" />
+                <span>Kamerayı Aç</span>
+              </button>
+
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex-1 py-3 rounded-xl font-semibold text-xs text-gray-200 bg-gray-800/80 border border-gray-700 hover:bg-gray-700/80 flex items-center justify-center space-x-2 transition-colors"
+              >
+                <FileUp className="w-4 h-4 text-emerald-400" />
+                <span>Dosya Yükle</span>
+              </button>
+            </div>
           </div>
         )}
 
         {isStreaming && (
-          <div className="relative w-full h-full">
-            <video ref={videoRef} playsInline className="w-full h-full object-cover" />
-            
+          <div className="relative w-full h-full bg-black">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+            />
+
             {/* Document Overlay Bounds */}
             <div className="absolute inset-6 rounded-xl scanner-overlay pointer-events-none flex flex-col justify-between p-4">
               <div className="w-full h-1 bg-gradient-to-r from-emerald-500 to-green-400 animate-scan-line rounded-full" />
-              <p className="text-xs text-center text-emerald-300 bg-black/60 py-1 rounded-md">Fişi çerçevenin ortasına hizalayın</p>
+              <p className="text-xs text-center text-emerald-300 bg-black/70 py-1 px-2 rounded-md">
+                Fişi çerçevenin ortasına hizalayın
+              </p>
             </div>
 
             <div className="absolute bottom-6 inset-x-0 flex justify-center space-x-4">
-              <button onClick={capturePhoto} className="w-16 h-16 rounded-full bg-white border-4 border-emerald-500 shadow-lg flex items-center justify-center active:scale-95 transition-transform">
+              <button
+                onClick={capturePhoto}
+                className="w-16 h-16 rounded-full bg-white border-4 border-emerald-500 shadow-xl flex items-center justify-center active:scale-95 transition-transform"
+              >
                 <div className="w-12 h-12 rounded-full bg-emerald-600" />
               </button>
             </div>
@@ -133,20 +203,20 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
         {capturedImage && (
           <div className="relative w-full h-full flex flex-col items-center justify-center">
             <img src={capturedImage} alt="Captured receipt" className="w-full h-full object-cover" />
-            
+
             <div className="absolute bottom-4 inset-x-4 flex justify-between space-x-2">
               <button
                 onClick={() => { setCapturedImage(null); startCamera(); }}
-                className="flex-1 py-3 px-4 rounded-xl bg-gray-800/80 text-white font-medium text-sm border border-gray-700 flex items-center justify-center space-x-2"
+                className="flex-1 py-3 px-4 rounded-xl bg-gray-900/90 text-white font-medium text-xs border border-gray-700 flex items-center justify-center space-x-2"
                 disabled={isUploading}
               >
                 <RefreshCw className="w-4 h-4" />
                 <span>Tekrar Çek</span>
               </button>
-              
+
               <button
                 onClick={handleUploadAndProcess}
-                className="flex-1 glass-button py-3 px-4 rounded-xl text-white font-medium text-sm flex items-center justify-center space-x-2"
+                className="flex-1 glass-button py-3 px-4 rounded-xl text-white font-medium text-xs flex items-center justify-center space-x-2"
                 disabled={isUploading}
               >
                 {isUploading ? (
@@ -163,11 +233,22 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
         )}
       </div>
 
+      {errorMessage && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-3 w-full p-3 rounded-xl bg-red-950/60 border border-red-500/30 text-red-300 text-xs flex items-center space-x-2"
+        >
+          <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-400" />
+          <span>{errorMessage}</span>
+        </motion.div>
+      )}
+
       {statusMessage && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mt-4 w-full p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-xs flex items-center space-x-2"
+          className="mt-3 w-full p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-xs flex items-center space-x-2"
         >
           <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-400" />
           <span>{statusMessage}</span>
