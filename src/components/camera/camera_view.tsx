@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { Camera, RefreshCw, UploadCloud, CheckCircle2, AlertCircle, FileUp, Image as ImageIcon } from 'lucide-react';
+import { Camera, RefreshCw, UploadCloud, CheckCircle2, AlertCircle, FileUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface CameraViewProps {
@@ -13,6 +13,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -20,37 +21,70 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
 
   const stopCamera = useCallback(() => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
+    if (stream) {
       stream.getTracks().forEach((track) => track.stop());
-      videoRef.current.srcObject = null;
-      setIsStreaming(false);
+      setStream(null);
     }
-  }, []);
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setIsStreaming(false);
+  }, [stream]);
+
+  // Bind media stream to video element whenever video element is mounted in DOM
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+      videoRef.current
+        .play()
+        .then(() => setIsStreaming(true))
+        .catch((err) => {
+          console.error('Video play error:', err);
+          setErrorMessage('Video akışı başlatılamadı. Dosya yükleme seçeneğini deneyin.');
+        });
+    }
+  }, [stream]);
 
   const startCamera = async () => {
     setErrorMessage(null);
+    // Stop any existing stream
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      // 1. Try environment camera (mobile back camera)
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
         },
         audio: false,
       });
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        // Ensure play is called and playsInline attribute is present
-        await videoRef.current.play();
+      setStream(mediaStream);
+      setIsStreaming(true);
+      setStatusMessage(null);
+    } catch (err: any) {
+      console.warn('Environment camera failed, trying fallback webcam constraints:', err);
+      try {
+        // 2. Fallback for laptop webcams or devices with single camera
+        const fallbackStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+
+        setStream(fallbackStream);
         setIsStreaming(true);
         setStatusMessage(null);
+      } catch (fallbackErr: any) {
+        console.error('All camera attempts failed:', fallbackErr);
+        setIsStreaming(false);
+        setErrorMessage(
+          'Kamera akışı başlatılamadı (Kamera yok veya tarayıcı engelledi). Lütfen "Dosya Yükle" butonunu kullanın.'
+        );
       }
-    } catch (err: any) {
-      console.error('Camera access error:', err);
-      setIsStreaming(false);
-      setErrorMessage('Kamera erişimi sağlanamadı veya kamera bulunamadı. Lütfen "Dosya Yükle" butonunu kullanın.');
     }
   };
 
@@ -90,7 +124,6 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
     setStatusMessage('Cloudflare R2 Yükleme URL\'si alınıyor...');
 
     try {
-      // 1. Request Presigned Upload URL
       const presignedRes = await fetch('/api/v1/receipts/upload-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -102,7 +135,6 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
 
       setStatusMessage('Fiş görseli R2 depolama alanına aktarılıyor...');
 
-      // 2. Enqueue for processing
       const processRes = await fetch('/api/v1/receipts/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -124,13 +156,14 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
 
   useEffect(() => {
     return () => {
-      stopCamera();
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
     };
-  }, [stopCamera]);
+  }, [stream]);
 
   return (
     <div className="w-full max-w-md mx-auto p-4 flex flex-col items-center">
-      {/* Hidden File Input */}
       <input
         type="file"
         ref={fileInputRef}
@@ -145,7 +178,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
             <div className="w-20 h-20 rounded-full bg-emerald-500/10 flex items-center justify-center border border-emerald-500/30">
               <Camera className="w-10 h-10 text-emerald-400" />
             </div>
-            
+
             <h3 className="text-xl font-bold text-white">Fişinizi Tara & İade Al</h3>
             <p className="text-xs text-gray-400 max-w-xs">
               Kameranızla fişinizi anında tarayın veya galerinizden fiş görselini seçin.
@@ -181,7 +214,6 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
               className="w-full h-full object-cover"
             />
 
-            {/* Document Overlay Bounds */}
             <div className="absolute inset-6 rounded-xl scanner-overlay pointer-events-none flex flex-col justify-between p-4">
               <div className="w-full h-1 bg-gradient-to-r from-emerald-500 to-green-400 animate-scan-line rounded-full" />
               <p className="text-xs text-center text-emerald-300 bg-black/70 py-1 px-2 rounded-md">
