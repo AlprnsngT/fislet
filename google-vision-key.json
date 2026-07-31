@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "august-splicer-504114-b4",
+  "private_key_id": "9152d332997898c3363027bd1fbc79559032427f",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDrLW8BCqaQFvAW\nazjGohPU58Xk1SVVpkLNtdtxnzUDfg5dyTJ9VZYPbblzErn5XP0PfWEZSX1PBBYG\no7WgQqcbeOruUu+4kxBeIT+wJMjq0hAjcd8GNTdAuE2GmWClfaTA9XwVfxcxgELD\nfYTHOKb0MPExHpi12eV5/bpkxpt7oE56Uf7/xIby+XE0HYJegjbHYaZ3eW9Xx7Kf\nG5rRAlQx1m1MrGQ76qPKJe5HK/qsx7ZKLloht6fzhx4AzOK/8iado0GLi096GEaP\nMiF4A1ljuNh6QltvHbYUoZfkzMVjnkOVBTaQM8cy+6yLKTUS/ae2TcRsgs6ckPAm\nEqssC5mrAgMBAAECggEAQTRLGxxTWw7pCSY4SyZj3jtWrGAGZm1fBz79NU8BeVLp\nc8pVY9enb+aprMSL6J4GEdXe5o5wHkjRPI0GTgU85MqNRH+dNG0d9CM+z70bMbQF\nQnaPcd6uT5Tp9cAvwiKIW/GUMjeW/CQGHsJ93miQLZMmREqp532e+MhG9ir0r/0V\nr9zt2dlEhZW5/m8Z3nBopAn5Kn6M+P7icoQ6AtV2CNfGR/uld6IVjJ+MvPvfp9od\n2y+gwsiFzICVybMSSrVhqKgXy0aJgVvfnRfl3HUcVCE80HxerIXz/Ao9krN0T1pK\nQwOFb2Epr5BOSqm7+7SiJwzelZaqf8cydgbrwgkFcQKBgQD+KM6R0GNV6sTLoqso\nboBI5VZnroCfPjua6l+QRJEuSjSoa6hUmQKjFwTsGLX4a2ggKbGRMMcr4uiMCSnX\nUmqbIpMhxXWUmuoEtwqgEfGfQfOHIU596RydzxUSPSH2I6UwU2IjE/jgOLWEHvoc\nMFUZNLGs4sLipkAlRHZJn2Mb2wKBgQDs4W+CTql/NnShOf8Q0PWCREMeUWPzj4Hq\nDX+V/claSFcE83kh5gRz0rxW04toXhqFNYWux5Id7GRLgWCzY+W5HRvE6PwyeQu9\nd3vrQbh6TKKKWPUBF5FSShF4HAMMIVQWScpZapGE42+vxE1EKO57Me4towyyfq9h\nklXDnW1KcQKBgCxpfQ9F1tXgnFrpJfd+t7QFP0AG4jrxaQD9C43uLWBlXyY/Cb8e\nrbNKBnYrK0Epo5xbLMguOd+VWwV9ZG5X3IEXXZZ9Jrq9Bz+jrJukBxDJOYDXdRvT\nbEi3Mvto61JTkD4NlAyFJOwpfK6FqzbZy0UITDPlvCBW5MaeW/0peOwZAoGAVBu/\noj8YA+lsBAs5u9jWM4jVZCB2Ivcjo91jHfjc08e3zjQ9IIIxtoZvBU1bxJUVSZM1\ngleuVB2phv3LPicMXGwvff1T/v/n4UBZqbDONe6cEA+B/v9FRDi0dzdLBbWXy8or\npRAn102CTKCg5sC53Nhfv6iTS5Wb5EM3XJu7QKECgYEA7TpNey8RyGFP+ECGJ7hz\n1OMQJv+ZFZtIA6lfGowIQVXMAGT6UJOs0OI7nj9BRhXDyySCfJKKxK9kdr6kEZAC\nErbV5VSMyIXTJuDbbwEVNNg32vmYCB+3iZFbiNyrJVrXpbth4MShoSlaI4Ai0Dgv\nUJkR8L0PVqrgwAmoMgAncMI=\n-----END PRIVATE KEY-----\n",
+  "client_email": "fislet-ocr-user@august-splicer-504114-b4.iam.gserviceaccount.com",
+  "client_id": "103911034652741003562",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/fislet-ocr-user%40august-splicer-504114-b4.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

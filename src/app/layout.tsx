@@ -1,12 +1,18 @@
 import './globals.css';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 
 export const metadata: Metadata = {
   title: 'FISOKUT-KAZAN | Fiş Tara & Cashback Kazan',
   description: 'Yüksek başarım sunan PWA fiş tarama ve anında nakit iade (cashback) platformu.',
   manifest: '/manifest.json',
+};
+
+export const viewport: Viewport = {
   themeColor: '#16a34a',
-  viewport: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
