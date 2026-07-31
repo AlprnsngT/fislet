@@ -4,40 +4,83 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { CameraView } from '@/components/camera/camera_view';
 import { WalletCard } from '@/components/wallet/wallet_card';
 import { useAuthStore } from '@/shared/stores/auth_store';
-import { LogOut, Receipt, CheckCircle, Clock, ShieldCheck, Zap, Inbox } from 'lucide-react';
+import { LogOut, CheckCircle, Clock, AlertTriangle, XCircle, Inbox, RefreshCw } from 'lucide-react';
 
 export const DashboardView: React.FC = () => {
   const { user, logout } = useAuthStore();
   const [balance, setBalance] = useState<number>(0.0);
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [receipts, setReceipts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const fetchWalletData = useCallback(async () => {
+  const fetchUserData = useCallback(async () => {
     if (!user) return;
     try {
       setIsLoading(true);
-      const res = await fetch(`/api/v1/wallet?userId=${user.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setBalance(data.balance || 0.0);
-        setTransactions(data.transactions || []);
+      // 1. Fetch wallet balance
+      const walletRes = await fetch(`/api/v1/wallet?userId=${user.id}`);
+      if (walletRes.ok) {
+        const walletData = await walletRes.json();
+        setBalance(walletData.balance || 0.0);
+      }
+
+      // 2. Fetch receipts history & statuses
+      const receiptsRes = await fetch(`/api/v1/receipts/my-receipts?userId=${user.id}`);
+      if (receiptsRes.ok) {
+        const receiptsData = await receiptsRes.json();
+        setReceipts(receiptsData.receipts || []);
       }
     } catch (err) {
-      console.error('Error loading wallet:', err);
+      console.error('Error loading dashboard data:', err);
     } finally {
       setIsLoading(false);
     }
   }, [user]);
 
   useEffect(() => {
-    fetchWalletData();
-  }, [fetchWalletData]);
+    fetchUserData();
+  }, [fetchUserData]);
 
   const handleScanComplete = () => {
-    // Refresh wallet and transaction history after new scan
+    // Refresh instantly and again after 2s
+    fetchUserData();
     setTimeout(() => {
-      fetchWalletData();
-    }, 1500);
+      fetchUserData();
+    }, 2500);
+  };
+
+  const getStatusBadge = (status: string, cashbackAmount: number) => {
+    switch (status) {
+      case 'PROCESSED':
+        return {
+          label: `Onaylandı (+₺${cashbackAmount.toFixed(2)})`,
+          color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+          icon: CheckCircle,
+        };
+      case 'PENDING':
+        return {
+          label: 'İnceleniyor (OCR İşleniyor...)',
+          color: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+          icon: Clock,
+        };
+      case 'REJECTED':
+        return {
+          label: 'Reddedildi (Geçersiz Fiş / VKN Yok)',
+          color: 'bg-red-500/10 text-red-400 border-red-500/30',
+          icon: XCircle,
+        };
+      case 'DUPLICATE':
+        return {
+          label: 'Mükerrer Fiş (Zaten Kullanılmış)',
+          color: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
+          icon: AlertTriangle,
+        };
+      default:
+        return {
+          label: 'İşleniyor',
+          color: 'bg-gray-800 text-gray-300 border-gray-700',
+          icon: Clock,
+        };
+    }
   };
 
   return (
@@ -61,48 +104,62 @@ export const DashboardView: React.FC = () => {
       </header>
 
       {/* Wallet Card */}
-      <WalletCard balance={balance} recentTransactionsCount={transactions.length} />
+      <WalletCard balance={balance} recentTransactionsCount={receipts.filter(r => r.status === 'PROCESSED').length} />
 
       {/* Camera / Scan Module */}
       <section className="glass-card p-4 rounded-3xl border border-emerald-500/20">
         <CameraView userId={user?.id || ''} onScanComplete={handleScanComplete} />
       </section>
 
-      {/* Recent Transactions Section */}
+      {/* Receipts History & Status Section */}
       <section className="glass-card p-5 rounded-3xl space-y-4 border border-gray-800">
-        <h3 className="text-sm font-bold text-white flex items-center justify-between">
-          <span>Son İşlemleriniz</span>
-          <span className="text-xs text-emerald-400 font-normal">{transactions.length} İşlem</span>
-        </h3>
+        <div className="flex justify-between items-center">
+          <h3 className="text-sm font-bold text-white">Fiş Durumlarınız & Geçmiş</h3>
+          <button
+            onClick={fetchUserData}
+            className="p-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition-colors"
+            title="Yenile"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
 
-        {transactions.length === 0 ? (
+        {receipts.length === 0 ? (
           <div className="py-8 flex flex-col items-center justify-center text-center space-y-2 border border-dashed border-gray-800 rounded-2xl">
             <Inbox className="w-8 h-8 text-gray-600" />
             <p className="text-xs text-gray-400">Henüz taranmış bir fişiniz bulunmuyor.</p>
-            <p className="text-[10px] text-gray-500">Yukarıdaki kamera veya dosya yükleme alanından fişinizi gönderebilirsiniz.</p>
+            <p className="text-[10px] text-gray-500">Yukarıdaki alandan fişinizi kameranızla çekip gönderebilirsiniz.</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {transactions.map((tx) => (
-              <div key={tx.id} className="p-3.5 rounded-2xl bg-gray-900/80 border border-gray-800 flex justify-between items-center">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 border border-emerald-500/20">
-                    <CheckCircle className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white">{tx.description || 'Fiş Ödülü'}</h4>
-                    <p className="text-[10px] text-gray-500">
-                      {new Date(tx.createdAt).toLocaleString('tr-TR')}
-                    </p>
-                  </div>
-                </div>
+            {receipts.map((item) => {
+              const badge = getStatusBadge(item.status, item.cashbackAmount);
+              const BadgeIcon = badge.icon;
 
-                <div className="text-right">
-                  <span className="text-xs font-extrabold text-emerald-400">+₺{Number(tx.amount).toFixed(2)}</span>
-                  <p className="text-[9px] text-gray-500 uppercase tracking-wider">Cashback</p>
+              return (
+                <div key={item.id} className="p-3.5 rounded-2xl bg-gray-900/80 border border-gray-800 flex justify-between items-center">
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${badge.color}`}>
+                      <BadgeIcon className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">
+                        {item.status === 'PROCESSED' ? `Fiş No: ${item.receiptNo}` : 'Gönderilen Görsel'}
+                      </h4>
+                      <p className="text-[10px] text-gray-500">
+                        {new Date(item.createdAt).toLocaleString('tr-TR')}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${badge.color}`}>
+                      {badge.label}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

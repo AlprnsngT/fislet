@@ -13,33 +13,45 @@ class PaddleOCREngine(BaseOCREngine):
         if not self._initialized:
             try:
                 from paddleocr import PaddleOCR
-                self.engine = PaddleOCR(use_angle_cls=True, lang='tr', show_log=False)
-            except ImportError:
+                try:
+                    self.engine = PaddleOCR(use_angle_cls=True, lang='tr')
+                except Exception:
+                    self.engine = PaddleOCR(lang='tr')
+            except Exception as e:
                 self.engine = None
             self._initialized = True
 
     def process_image(self, image_buffer: bytes) -> OCRResult:
         self._lazy_init()
         
-        if self.engine is None:
-            # Fallback mock for local dev environment when paddleocr package isn't installed
-            mock_text = "Firma: A101 MARKET\nVKN: 1234567890\nTARIH: 31.07.2026\nFIS NO: 0042\nTOPLAM: 154.50 TL"
-            extracted = ReceiptDataParser.parse(mock_text)
+        if self.engine is None or not image_buffer or len(image_buffer) < 100:
             return OCRResult(
-                raw_text=mock_text,
-                engine_name="paddle_mock",
-                confidence=0.95,
-                extracted_data=extracted
+                raw_text="",
+                engine_name="paddleocr",
+                confidence=0.0,
+                extracted_data={"vkn": None, "total_amount": None, "is_valid": False}
             )
 
-        # Execution on PaddleOCR engine
+        # Execution on PaddleOCR engine with real camera image bytes
         import numpy as np
         import cv2
 
         nparr = np.frombuffer(image_buffer, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-        result = self.engine.ocr(img, cls=True)
+        if img is None:
+            return OCRResult(
+                raw_text="",
+                engine_name="paddleocr",
+                confidence=0.0,
+                extracted_data={"vkn": None, "total_amount": None, "is_valid": False}
+            )
+
+        try:
+            result = self.engine.ocr(img, cls=True)
+        except Exception:
+            result = self.engine.ocr(img)
+
         raw_lines = []
         if result and result[0]:
             for line in result[0]:

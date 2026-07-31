@@ -9,6 +9,14 @@ class GoogleVisionOCREngine(BaseOCREngine):
     """
 
     def process_image(self, image_buffer: bytes) -> OCRResult:
+        if not image_buffer or len(image_buffer) < 100:
+            return OCRResult(
+                raw_text="",
+                engine_name="google_cloud_vision",
+                confidence=0.0,
+                extracted_data={"vkn": None, "total_amount": None, "is_valid": False}
+            )
+
         try:
             from google.cloud import vision
             client = vision.ImageAnnotatorClient()
@@ -31,12 +39,9 @@ class GoogleVisionOCREngine(BaseOCREngine):
                 extracted_data=extracted
             )
         except Exception as e:
-            # Fallback mock text if Cloud Vision credentials aren't set in dev environment
-            mock_text = "MOCK VISION API\nVKN: 9876543210\nTARIH: 31.07.2026\nFIS NO: 0108\nTOPLAM: 299.90 TL"
-            extracted = ReceiptDataParser.parse(mock_text)
             return OCRResult(
-                raw_text=mock_text,
-                engine_name="google_cloud_vision_mock",
-                confidence=0.95,
-                extracted_data=extracted
+                raw_text="",
+                engine_name="google_cloud_vision",
+                confidence=0.0,
+                extracted_data={"vkn": None, "total_amount": None, "is_valid": False}
             )

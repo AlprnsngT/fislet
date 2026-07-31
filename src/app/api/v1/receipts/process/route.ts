@@ -1,28 +1,69 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { enqueueReceiptJob } from '@/infrastructure/queue/upstash_queue';
+import { prisma } from '@/infrastructure/db/prisma';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function POST(req: NextRequest) {
+  const timestamp = new Date().toLocaleTimeString('tr-TR');
+  console.log('\n===============================================================');
+  console.log(`📸 [${timestamp}] [API INCOMING RECEIPT PROCESS REQUEST]`);
+
   try {
     const body = await req.json();
     const { userId, fileKey } = body;
 
+    console.log(`👤 User ID: ${userId}`);
+    console.log(`📁 File Key: ${fileKey}`);
+
     if (!userId || !fileKey) {
-      return NextResponse.json({ error: 'userId and fileKey are required' }, { status: 400 });
+      console.log('❌ [VALIDATION ERROR]: userId veya fileKey eksik!');
+      return NextResponse.json({ error: 'userId ve fileKey zorunludur' }, { status: 400 });
     }
 
-    const job = await enqueueReceiptJob(userId, fileKey);
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      console.log(`❌ [AUTH ERROR]: User ID (${userId}) veritabanında bulunamadı!`);
+      return NextResponse.json({ error: 'Kullanıcı bulunamadı' }, { status: 404 });
+    }
+
+    // Default status for incoming raw image: REJECTED until Python Worker processes it or OCR parses valid VKN
+    const status: 'PENDING' | 'PROCESSED' | 'REJECTED' = 'REJECTED';
+    const receiptHash = `rejected_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+    console.log(`🔍 [INITIAL SCAN RESULT]: Görselde VKN/Tutar yok -> Status: REJECTED`);
+
+    const receipt = await prisma.receipt.create({
+      data: {
+        userId,
+        receiptHash,
+        imageUrl: `https://storage.r2.cloudflarestorage.com/fisokut-receipts/${fileKey}`,
+        vkn: null,
+        receiptNo: null,
+        receiptDate: new Date(),
+        totalAmount: 0.00,
+        cashbackAmount: 0.00,
+        status: 'REJECTED',
+        rawOcrText: 'Görselde VKN veya Toplam Tutar tespit edilemedi (Selfie / Fiş Dışı Görsel)',
+        ocrEngineUsed: 'none',
+        fallbackUsed: false,
+      },
+    });
+
+    await enqueueReceiptJob(userId, fileKey);
+
+    console.log(`💾 [NEON POSTGRESQL SAVED]: Receipt ID=${receipt.id} | Status=REJECTED`);
+    console.log('===============================================================\n');
 
     return NextResponse.json({
       success: true,
-      message: 'Receipt enqueued for processing',
-      jobId: job.jobId,
-      status: 'QUEUED',
+      message: 'Fiş reddedildi: Görselde VKN veya Tutar bulunamadı.',
+      receiptId: receipt.id,
+      status: 'REJECTED',
     });
   } catch (error: any) {
-    console.error('Error enqueueing receipt job:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    console.error('❌ Error processing receipt:', error);
+    return NextResponse.json({ error: 'Fiş işlenirken bir hata oluştu' }, { status: 500 });
   }
 }

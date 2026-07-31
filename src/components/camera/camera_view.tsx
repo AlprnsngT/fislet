@@ -144,8 +144,14 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
       const processData = await processRes.json();
       if (!processRes.ok) throw new Error(processData.error || 'İşleme hatası');
 
-      setStatusMessage('Fiş başarıyla kuyruğa alındı! OCR işleniyor...');
+      setStatusMessage('Fiş başarıyla gönderildi! OCR işleniyor...');
       onScanComplete(processData);
+
+      // Reset captured image preview after 2 seconds to return to scanner
+      setTimeout(() => {
+        setCapturedImage(null);
+        setStatusMessage(null);
+      }, 2500);
     } catch (err: any) {
       console.error(err);
       setStatusMessage(`İşlem Hatası: ${err.message}`);
