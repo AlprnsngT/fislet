@@ -9,6 +9,7 @@ This document serves as the single source of truth for the AI Developer Agent.
 4. Keep all responses clear, concise, and direct. Single sentence per idea. No fluff words.
 
 ---
+---
 
 ## SYSTEM ARCHITECTURE OVERVIEW
 A high-throughput, serverless PWA application that enables users to scan shopping receipts, validates receipt uniqueness via composite hashing, processes OCR using a hybrid approach, and grants cashbacks.
