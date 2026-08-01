@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { AdminSidebar } from './admin_sidebar';
+import { AdminSidebar, AdminTabType } from './admin_sidebar';
 import { AdminKpiCards } from './admin_kpi_cards';
 import { AdminCategoryCards } from './admin_category_cards';
 import { AdminMasterChart } from './admin_master_chart';
@@ -30,7 +30,7 @@ interface AnalyticsData {
 export const AdminDashboardView: React.FC = () => {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'analytics' | 'products' | 'settings'>('analytics');
+  const [activeTab, setActiveTab] = useState<AdminTabType>('analytics');
 
   const fetchAnalytics = async () => {
     setLoading(true);
@@ -64,12 +64,12 @@ export const AdminDashboardView: React.FC = () => {
 
       {/* 2. Main Content View Area Orchestrating Decoupled SOLID Components */}
       <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8">
-        {/* TAB 1: ANALİZ & GRAFİKLER */}
+        {/* SEKME 1: ANALİZLER (KPI Kartları & Kategori Kartları) */}
         {activeTab === 'analytics' && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
             <div>
-              <h2 className="text-2xl font-black text-white">B2B PAZARLAMA ANALİZİ</h2>
-              <p className="text-xs text-gray-400">Veritabanından çekilen canlı tüketici eğilimleri & grafiksel pazar analizleri</p>
+              <h2 className="text-2xl font-black text-white">B2B PAZARLAMA ANALİZLERİ</h2>
+              <p className="text-xs text-gray-400">Veritabanından çekilen canlı tüketici eğilimleri & kategori bazlı geçiş kartları</p>
             </div>
 
             {/* KPI Stat Cards Component */}
@@ -77,17 +77,21 @@ export const AdminDashboardView: React.FC = () => {
 
             {/* Category Breakdown Cards Component */}
             <AdminCategoryCards categories={data?.categoryAnalytics} totalVolume={data?.metrics.totalVolume} />
+          </motion.div>
+        )}
 
-            {/* Interactive Master Chart Component */}
+        {/* SEKME 2: GRAFİKLER (Alan & Çubuk Grafiği Aynı Anda) */}
+        {activeTab === 'charts' && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+            {/* Interactive Master Charts Component (Area & Bar stacked simultaneously) */}
             <AdminMasterChart
               dailyTrend={data?.dailyTrend}
               topProducts={data?.topProducts}
-              categoryAnalytics={data?.categoryAnalytics}
             />
           </motion.div>
         )}
 
-        {/* TAB 2: ÜRÜNLERİM KATALOĞU */}
+        {/* SEKME 3: ÜRÜNLERİM KATALOĞU */}
         {activeTab === 'products' && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
             {/* Products Table Component */}
@@ -95,7 +99,7 @@ export const AdminDashboardView: React.FC = () => {
           </motion.div>
         )}
 
-        {/* TAB 3: SİSTEM & CASHBACK AYARLARI */}
+        {/* SEKME 4: SİSTEM & CASHBACK AYARLARI */}
         {activeTab === 'settings' && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
             {/* Admin Settings Form Component */}

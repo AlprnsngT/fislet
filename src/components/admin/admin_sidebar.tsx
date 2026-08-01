@@ -4,6 +4,7 @@ import React from 'react';
 import {
   ShieldCheck,
   LayoutDashboard,
+  BarChart3,
   Package,
   Settings,
   ChevronRight,
@@ -12,9 +13,11 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/shared/stores/auth_store';
 
+export type AdminTabType = 'analytics' | 'charts' | 'products' | 'settings';
+
 interface AdminSidebarProps {
-  activeTab: 'analytics' | 'products' | 'settings';
-  setActiveTab: (tab: 'analytics' | 'products' | 'settings') => void;
+  activeTab: AdminTabType;
+  setActiveTab: (tab: AdminTabType) => void;
   totalProductsCount: number;
   loading: boolean;
   onRefresh: () => void;
@@ -59,7 +62,22 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           >
             <div className="flex items-center space-x-3">
               <LayoutDashboard className="w-4 h-4" />
-              <span>Analiz & Grafikler</span>
+              <span>Analizler</span>
+            </div>
+            <ChevronRight className="w-4 h-4 opacity-60" />
+          </button>
+
+          <button
+            onClick={() => setActiveTab('charts')}
+            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold text-xs transition-all ${
+              activeTab === 'charts'
+                ? 'bg-purple-600/90 text-white shadow-lg shadow-purple-500/20 border border-purple-400/40'
+                : 'text-gray-400 hover:bg-gray-800/60 hover:text-white'
+            }`}
+          >
+            <div className="flex items-center space-x-3">
+              <BarChart3 className="w-4 h-4" />
+              <span>Grafikler</span>
             </div>
             <ChevronRight className="w-4 h-4 opacity-60" />
           </button>
