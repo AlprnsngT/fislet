@@ -33,7 +33,6 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'asc' },
     });
 
-    // Grouping by Date String (YYYY-MM-DD)
     const dailyTrendMap = new Map<string, { count: number; volume: number }>();
     for (let i = 0; i < 7; i++) {
       const d = new Date();
@@ -57,7 +56,7 @@ export async function GET(req: NextRequest) {
       hacim: data.volume,
     }));
 
-    // 3. Category Share Analytics (Daire Grafiği İçin Kategori Dağılımı)
+    // 3. Category Share Analytics
     const categoryStatsRaw = await prisma.receiptItem.groupBy({
       by: ['categoryId'],
       _sum: { totalPrice: true, quantity: true },
@@ -73,7 +72,7 @@ export async function GET(req: NextRequest) {
       quantity: Number(stat._sum.quantity || 0),
     }));
 
-    // 4. Top Products Analytics (En Çok Satılan Ürünler Çubuk Grafiği)
+    // 4. Top Products Analytics
     const topProductsRaw = await prisma.receiptItem.groupBy({
       by: ['itemName'],
       _sum: { quantity: true, totalPrice: true },
@@ -87,7 +86,28 @@ export async function GET(req: NextRequest) {
       tutar: Number(p._sum.totalPrice || 0),
     }));
 
-    // 5. Merchant Market Share (Mağaza Pazar Payı)
+    // 5. Detailed Products Catalog for "Ürünlerim" Tab
+    const allItems = await prisma.receiptItem.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: {
+        category: true,
+        receipt: { select: { merchantName: true, createdAt: true } },
+      },
+    });
+
+    const productsCatalog = allItems.map((item) => ({
+      id: item.id,
+      itemName: item.itemName,
+      categoryName: item.category?.name || 'Genel',
+      merchantName: item.receipt.merchantName || 'Market',
+      quantity: item.quantity,
+      unitPrice: Number(item.unitPrice),
+      totalPrice: Number(item.totalPrice),
+      date: item.createdAt,
+    }));
+
+    // 6. Merchant Market Share
     const merchantShareRaw = await prisma.receipt.groupBy({
       by: ['merchantName'],
       where: { status: 'PROCESSED' },
@@ -103,16 +123,6 @@ export async function GET(req: NextRequest) {
       hacim: Number(m._sum.totalAmount || 0),
     }));
 
-    // 6. Recent Audit Logs
-    const recentReceipts = await prisma.receipt.findMany({
-      take: 6,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        user: { select: { name: true, username: true } },
-        items: true,
-      },
-    });
-
     return NextResponse.json({
       success: true,
       metrics: {
@@ -123,21 +133,13 @@ export async function GET(req: NextRequest) {
         totalVolume,
         totalCashbackPaid,
         avgBasketSize,
+        totalProductsCount: allItems.length,
       },
       dailyTrend,
       categoryAnalytics,
       topProducts,
+      productsCatalog,
       merchantShare,
-      recentReceipts: recentReceipts.map((r) => ({
-        id: r.id,
-        user: r.user.name || r.user.username,
-        merchantName: r.merchantName || 'Mağaza',
-        totalAmount: Number(r.totalAmount),
-        cashbackAmount: Number(r.cashbackAmount),
-        status: r.status,
-        date: r.createdAt,
-        itemsCount: r.items.length,
-      })),
     });
   } catch (error: any) {
     console.error('Admin Analytics API error:', error);
