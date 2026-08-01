@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { Camera, RefreshCw, UploadCloud, CheckCircle2, AlertCircle, FileUp } from 'lucide-react';
+import { Camera, RefreshCw, UploadCloud, CheckCircle2, AlertCircle, FileUp, ScanText } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { recognize } from 'tesseract.js';
 
 interface CameraViewProps {
   userId: string;
@@ -31,7 +32,6 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
     setIsStreaming(false);
   }, [stream]);
 
-  // Bind media stream to video element whenever video element is mounted in DOM
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
@@ -47,13 +47,11 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
 
   const startCamera = async () => {
     setErrorMessage(null);
-    // Stop any existing stream
     if (stream) {
       stream.getTracks().forEach((t) => t.stop());
     }
 
     try {
-      // 1. Try environment camera (mobile back camera)
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: 'environment' },
@@ -69,7 +67,6 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
     } catch (err: any) {
       console.warn('Environment camera failed, trying fallback webcam constraints:', err);
       try {
-        // 2. Fallback for laptop webcams or devices with single camera
         const fallbackStream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: false,
@@ -121,9 +118,22 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
     if (!capturedImage) return;
 
     setIsUploading(true);
-    setStatusMessage('Cloudflare R2 Yükleme URL\'si alınıyor...');
+    setStatusMessage('1/3 Fiş görseli Tesseract OCR ile taranıyor...');
 
     try {
+      // 1. Run Real Tesseract OCR on the captured receipt image
+      let extractedOcrText = '';
+      try {
+        const ocrResult = await recognize(capturedImage, 'tur+eng');
+        extractedOcrText = ocrResult?.data?.text || '';
+        console.log('🔍 [REAL CLIENT OCR EXTRACTED TEXT]:\n', extractedOcrText);
+      } catch (ocrErr) {
+        console.warn('OCR recognition warning:', ocrErr);
+      }
+
+      setStatusMessage('2/3 Cloudflare R2 Depolama Alanına aktarılıyor...');
+
+      // 2. Fetch presigned upload URL
       const presignedRes = await fetch('/api/v1/receipts/upload-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -133,25 +143,29 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
       const presignedData = await presignedRes.json();
       if (!presignedRes.ok) throw new Error(presignedData.error || 'Upload URL hatası');
 
-      setStatusMessage('Fiş görseli R2 depolama alanına aktarılıyor...');
+      setStatusMessage('3/3 Fiş verileri doğrulanıyor ve kaydediliyor...');
 
+      // 3. Send real extracted OCR text to process API
       const processRes = await fetch('/api/v1/receipts/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, fileKey: presignedData.fileKey }),
+        body: JSON.stringify({
+          userId,
+          fileKey: presignedData.fileKey,
+          rawOcrTextFromClient: extractedOcrText,
+        }),
       });
 
       const processData = await processRes.json();
       if (!processRes.ok) throw new Error(processData.error || 'İşleme hatası');
 
-      setStatusMessage('Fiş başarıyla gönderildi! OCR işleniyor...');
+      setStatusMessage(processData.message || 'Fiş başarıyla doğrulandı!');
       onScanComplete(processData);
 
-      // Reset captured image preview after 2 seconds to return to scanner
       setTimeout(() => {
         setCapturedImage(null);
         setStatusMessage(null);
-      }, 2500);
+      }, 3000);
     } catch (err: any) {
       console.error(err);
       setStatusMessage(`İşlem Hatası: ${err.message}`);
@@ -288,7 +302,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
           animate={{ opacity: 1, y: 0 }}
           className="mt-3 w-full p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-xs flex items-center space-x-2"
         >
-          <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-400" />
+          <ScanText className="w-4 h-4 flex-shrink-0 text-emerald-400 animate-pulse" />
           <span>{statusMessage}</span>
         </motion.div>
       )}

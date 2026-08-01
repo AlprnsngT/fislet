@@ -30,27 +30,30 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
     .map((l) => l.trim())
     .filter(Boolean);
 
-  // 1. Dynamic Merchant / Store Name Extraction
+  // 1. Dynamic Store / Merchant Name Extraction (First 5 lines)
   let merchantName = 'BİLİNMEYEN MAĞAZA';
-  const merchantKeywords = [
-    'A101', 'MİGROS', 'MIGROS', 'BİM', 'BIM', 'ŞOK', 'SOK', 'CARREFOURSA', 'MACROCENTER',
-    'KÖFTECİ YUSUF', 'KOFTECI YUSUF', 'SHELL', 'BP', 'OPET', 'TOTAL', 'BETA', 'TEKZEN', 'BAUHAUS',
-    'MARKET', 'MAĞAZACILIK', 'MAGAZACILIK', 'GIDA', 'RESTORAN', 'CAFE', 'PETROL', 'ECZANE',
-    'LTD.ŞTİ.', 'LTD. ŞTİ.', 'A.Ş.', 'TİC.', 'SAN.'
+  const merchantSuffixes = [
+    'LTD.ŞTİ', 'LTD. ŞTİ', 'LTD.ŞTI', 'A.Ş.', 'A.S.', 'TİC.', 'TIC.', 'SAN.', 'SANAYİ',
+    'MARKET', 'MAĞAZA', 'MAGAZA', 'MAĞAZACILIK', 'MAGAZACILIK', 'GIDA', 'RESTORAN', 'CAFE', 'KAFE',
+    'PETROL', 'ECZANE', 'BAKKAL', 'MANAV', 'A101', 'MİGROS', 'MIGROS', 'BİM', 'BIM', 'ŞOK', 'SOK',
+    'CARREFOURSA', 'MACROCENTER', 'KÖFTECİ YUSUF', 'KOFTECI YUSUF'
   ];
 
   for (const line of lines.slice(0, 5)) {
     const upper = line.toUpperCase();
-    if (merchantKeywords.some((kw) => upper.includes(kw))) {
-      // Clean numbers and extra noise from merchant name line
-      merchantName = line.replace(/^\d+[\s\.-]*/, '').trim();
+    if (merchantSuffixes.some((suffix) => upper.includes(suffix))) {
+      // Clean non-letter noise from start of merchant name
+      merchantName = line.replace(/^[^\p{L}]+/u, '').trim();
       break;
     }
   }
 
-  // Fallback: If no keyword found, use top line of receipt
+  // Fallback: If no suffix matched, take line 0 or line 1 of thermal receipt header
   if (merchantName === 'BİLİNMEYEN MAĞAZA' && lines.length > 0) {
-    merchantName = lines[0].substring(0, 30);
+    const candidate = lines[0].replace(/^[^\p{L}]+/u, '').trim();
+    if (candidate.length > 2) {
+      merchantName = candidate.substring(0, 35);
+    }
   }
 
   // 2. Exact VKN / TCKN Extraction (10 or 11 digits)
@@ -60,13 +63,18 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
     vkn = vknMatch[1];
   }
 
-  // 3. Exact Receipt Date & Time Parsing
+  // 3. Exact Receipt Date & Time Parsing (DD.MM.YYYY or DD/MM/YYYY + HH:MM:SS)
   let dateObj = new Date();
   let dateStr: string | null = null;
-  const dateMatch = rawText.match(/\b(\d{2})[\/\.-](\d{2})[\/\.-](\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?\b/);
+  
+  // Match DD.MM.YYYY or DD/MM/YYYY or DD-MM-YYYY, with optional HH:MM or HH:MM:SS
+  const dateMatch = rawText.match(/\b(\d{2})[\/\.-](\d{2})[\/\.-](\d{4}|\d{2})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?\b/);
 
   if (dateMatch) {
-    const [, day, month, year, hour = '12', minute = '00', second = '00'] = dateMatch;
+    let [, day, month, year, hour = '12', minute = '00', second = '00'] = dateMatch;
+    if (year.length === 2) {
+      year = `20${year}`;
+    }
     dateStr = `${day}.${month}.${year} ${hour}:${minute}:${second}`;
     const parsedDate = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}`);
     if (!isNaN(parsedDate.getTime())) {
@@ -74,13 +82,12 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
     }
   }
 
-  // 4. Receipt / Z Number Extraction
+  // 4. Receipt / Z Number Extraction (FIŞ NO, FIS NO, Z NO, SIRA NO, BELGE NO, ETTN)
   let receiptNo: string | null = null;
   const receiptNoMatch = rawText.match(/(?:FI[ŞS]\s*NO|Z\s*NO|F[Iİ]S\s*NO|SIRA\s*NO|BELGE\s*NO|ETTN)\s*[:\.]?\s*([A-Za-z0-9-]+)/i);
   if (receiptNoMatch) {
     receiptNo = receiptNoMatch[1];
   } else {
-    // Check standalone number patterns in lines containing 'NO'
     const noLine = lines.find((l) => /NO\s*[:\.]?/i.test(l));
     if (noLine) {
       const numMatch = noLine.match(/\d+/);
@@ -88,9 +95,9 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
     }
   }
 
-  // 5. Total Amount Extraction (TOPLAM, ÖDENEN, KART, TUTAR, TOP)
+  // 5. Total Amount Extraction (TOPLAM or TUTAR line)
   let totalAmount = 0;
-  const totalKeywords = ['TOPLAM', 'ÖDENEN', 'ODENEN', 'KART', 'TUTAR', 'TOP', 'GENEL TOPLAM', 'KDV DAHİL TOPLAM'];
+  const totalKeywords = ['TOPLAM', 'TUTAR', 'ÖDENEN', 'ODENEN', 'KART', 'TOP', 'GENEL TOPLAM', 'KDV DAHİL TOPLAM'];
   const priceRegex = /(\d+[,\.]\d{2})/;
 
   for (const line of [...lines].reverse()) {
@@ -107,7 +114,7 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
     }
   }
 
-  // Fallback: search for largest price float in raw text
+  // Fallback: search for largest price float in raw text if keyword line failed
   if (totalAmount === 0) {
     const allPrices = Array.from(rawText.matchAll(/(\d+[,\.]\d{2})/g))
       .map((m) => parseFloat(m[1].replace(',', '.')))
@@ -119,7 +126,7 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
 
   const isValid = totalAmount > 0;
 
-  // 6. Compute Deterministic SHA-256 Composite Hash for Duplicate Detection
+  // 6. Compute SHA-256 Composite Hash for Duplicate Prevention
   const merchantKey = (vkn || merchantName).toLowerCase().replace(/\s+/g, '');
   const dateKey = (dateStr || dateObj.toISOString()).replace(/\s+/g, '');
   const receiptNoKey = (receiptNo || '').replace(/\s+/g, '');
