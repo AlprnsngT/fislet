@@ -30,51 +30,85 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
     .map((l) => l.trim())
     .filter(Boolean);
 
-  // 1. Dynamic Store / Merchant Name Extraction (First 5 lines)
+  // 1. Dynamic Store / Merchant Name Extraction (Top 7 lines)
   let merchantName = 'BİLİNMEYEN MAĞAZA';
   const merchantSuffixes = [
     'LTD.ŞTİ', 'LTD. ŞTİ', 'LTD.ŞTI', 'A.Ş.', 'A.S.', 'TİC.', 'TIC.', 'SAN.', 'SANAYİ',
     'MARKET', 'MAĞAZA', 'MAGAZA', 'MAĞAZACILIK', 'MAGAZACILIK', 'GIDA', 'RESTORAN', 'CAFE', 'KAFE',
     'PETROL', 'ECZANE', 'BAKKAL', 'MANAV', 'A101', 'MİGROS', 'MIGROS', 'BİM', 'BIM', 'ŞOK', 'SOK',
-    'CARREFOURSA', 'MACROCENTER', 'KÖFTECİ YUSUF', 'KOFTECI YUSUF'
+    'CARREFOURSA', 'MACROCENTER', 'KÖFTECİ YUSUF', 'KOFTECI YUSUF', 'BURGER', 'MC DONALDS', 'STARBUCKS'
   ];
 
-  for (const line of lines.slice(0, 5)) {
+  // Search top 7 lines for known store keywords or company suffixes
+  for (const line of lines.slice(0, 7)) {
     const upper = line.toUpperCase();
+    // Exclude system lines like HOŞGELDİNİZ, TARİH, MERSİS, FİŞ
+    if (upper.includes('HOŞGELDİNİZ') || upper.includes('TARİH') || upper.includes('MERSİS') || upper.includes('FİŞ NO')) {
+      continue;
+    }
     if (merchantSuffixes.some((suffix) => upper.includes(suffix))) {
-      // Clean non-letter noise from start of merchant name
       merchantName = line.replace(/^[^\p{L}]+/u, '').trim();
       break;
     }
   }
 
-  // Fallback: If no suffix matched, take line 0 or line 1 of thermal receipt header
-  if (merchantName === 'BİLİNMEYEN MAĞAZA' && lines.length > 0) {
-    const candidate = lines[0].replace(/^[^\p{L}]+/u, '').trim();
-    if (candidate.length > 2) {
-      merchantName = candidate.substring(0, 35);
+  // Fallback: If no suffix matched, pick the first line in top 4 that has letters and is not a date/number
+  if (merchantName === 'BİLİNMEYEN MAĞAZA') {
+    for (const line of lines.slice(0, 5)) {
+      const upper = line.toUpperCase();
+      const hasLetter = /[\p{L}]/u.test(line);
+      const isSystemLine = upper.includes('HOŞGELDİNİZ') || upper.includes('TARİH') || upper.includes('MERSİS') || upper.includes('FIŞ') || upper.includes('FİŞ') || upper.includes('VKN') || upper.includes('TEL');
+      
+      if (hasLetter && !isSystemLine && line.length >= 3) {
+        merchantName = line.replace(/^[^\p{L}]+/u, '').trim().substring(0, 40);
+        break;
+      }
     }
   }
 
-  // 2. Exact VKN / TCKN Extraction (10 or 11 digits)
+  // 2. VKN / TCKN / MERSİS NO Extraction (10, 11, or 16 digits)
   let vkn: string | null = null;
-  const vknMatch = rawText.match(/(?:VKN|TCKN|VERGİ NO|VERGI NO)?\s*[:\.]?\s*\b(\d{10,11})\b/i);
-  if (vknMatch) {
+  // Match MERSIS (16 digits) or VKN (10 digits) or TCKN (11 digits)
+  const mersisMatch = rawText.match(/(?:MERS[İI]S\s*NO|MERS[İI]S)?\s*[:\.]?\s*\b(\d{16})\b/i);
+  const vknMatch = rawText.match(/(?:VKN|TCKN|VERG[İI]\s*NO)?\s*[:\.]?\s*\b(\d{10,11})\b/i);
+
+  if (mersisMatch) {
+    vkn = `MERSİS: ${mersisMatch[1]}`;
+  } else if (vknMatch) {
     vkn = vknMatch[1];
+  } else {
+    // Look for standalone 10 or 16 digits in text
+    const digitMatch = rawText.match(/\b(\d{10}|\d{16})\b/);
+    if (digitMatch) {
+      vkn = digitMatch[1];
+    }
   }
 
-  // 3. Exact Receipt Date & Time Parsing (DD.MM.YYYY or DD/MM/YYYY + HH:MM:SS)
+  // 3. Exact Receipt Date & Time Parsing (Combine separate date and time matches if needed)
   let dateObj = new Date();
   let dateStr: string | null = null;
-  
-  // Match DD.MM.YYYY or DD/MM/YYYY or DD-MM-YYYY, with optional HH:MM or HH:MM:SS
-  const dateMatch = rawText.match(/\b(\d{2})[\/\.-](\d{2})[\/\.-](\d{4}|\d{2})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?\b/);
+
+  // Extract Date string: DD.MM.YYYY, DD/MM/YYYY, or DD-MM-YYYY
+  const dateMatch = rawText.match(/\b(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{2,4})\b/);
+  // Extract Time string: HH:MM or HH:MM:SS
+  const timeMatch = rawText.match(/\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b/);
 
   if (dateMatch) {
-    let [, day, month, year, hour = '12', minute = '00', second = '00'] = dateMatch;
-    if (year.length === 2) {
-      year = `20${year}`;
+    let day = dateMatch[1].padStart(2, '0');
+    let month = dateMatch[2].padStart(2, '0');
+    let year = dateMatch[3];
+    if (year.length === 2) year = `20${year}`;
+
+    let hour = '12';
+    let minute = '00';
+    let second = '00';
+
+    if (timeMatch) {
+      hour = timeMatch[1].padStart(2, '0');
+      minute = timeMatch[2].padStart(2, '0');
+      if (timeMatch[3]) second = timeMatch[3].padStart(2, '0');
     }
+
     dateStr = `${day}.${month}.${year} ${hour}:${minute}:${second}`;
     const parsedDate = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}`);
     if (!isNaN(parsedDate.getTime())) {
