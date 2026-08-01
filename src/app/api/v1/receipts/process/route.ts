@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { enqueueReceiptJob } from '@/infrastructure/queue/upstash_queue';
 import { prisma } from '@/infrastructure/db/prisma';
 import { parseReceiptText } from '@/shared/utils/receipt_parser';
+import { detectTextWithGoogleVision } from '@/infrastructure/ocr/google_vision_ocr';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -37,9 +38,23 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 2. Parse Raw OCR Text with ZERO Mock Fallbacks
-    const ocrTextToParse = rawOcrTextFromClient || '';
-    const parsed = parseReceiptText(ocrTextToParse);
+    const imageUrl = `https://storage.r2.cloudflarestorage.com/fisokut-receipts/${fileKey}`;
+
+    // 2. Multi-Engine OCR Fallback Pipeline:
+    // Tier 1: Client Tesseract.js -> Tier 2: Google Cloud Vision API -> Tier 3: Raw Text
+    let finalOcrText = rawOcrTextFromClient || '';
+    let ocrEngineUsed = 'tesseract.js';
+
+    // If client OCR did not yield valid text, try Google Cloud Vision API
+    if (!finalOcrText || finalOcrText.trim().length < 10) {
+      const googleVisionText = await detectTextWithGoogleVision(imageUrl);
+      if (googleVisionText) {
+        finalOcrText = googleVisionText;
+        ocrEngineUsed = 'google_cloud_vision';
+      }
+    }
+
+    const parsed = parseReceiptText(finalOcrText);
 
     // If explicit non-receipt fileKey pattern (like selfie or photo) and no valid text provided
     const isExplicitNonReceipt = fileKey.includes('selfie') || fileKey.includes('photo') || !parsed.isValid;
@@ -61,7 +76,7 @@ export async function POST(req: NextRequest) {
           data: {
             userId,
             receiptHash: `dup_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-            imageUrl: `https://storage.r2.cloudflarestorage.com/fisokut-receipts/${fileKey}`,
+            imageUrl,
             vkn: parsed.vkn,
             merchantName: parsed.merchantName,
             receiptNo: parsed.receiptNo,
@@ -69,8 +84,8 @@ export async function POST(req: NextRequest) {
             totalAmount: parsed.totalAmount,
             cashbackAmount: 0.00,
             status: 'DUPLICATE',
-            rawOcrText: ocrTextToParse || 'Mükerrer Fiş (Zaten Kullanılmış)',
-            ocrEngineUsed: 'paddleocr',
+            rawOcrText: finalOcrText || 'Mükerrer Fiş (Zaten Kullanılmış)',
+            ocrEngineUsed,
             fallbackUsed: false,
           },
         });
@@ -105,7 +120,7 @@ export async function POST(req: NextRequest) {
         data: {
           userId,
           receiptHash: parsed.compositeHash,
-          imageUrl: `https://storage.r2.cloudflarestorage.com/fisokut-receipts/${fileKey}`,
+          imageUrl,
           vkn: parsed.vkn,
           merchantName: parsed.merchantName,
           receiptNo: parsed.receiptNo,
@@ -113,8 +128,8 @@ export async function POST(req: NextRequest) {
           totalAmount: parsed.totalAmount,
           cashbackAmount,
           status,
-          rawOcrText: ocrTextToParse || (status === 'PROCESSED' ? `${parsed.merchantName} - TOPLAM ${parsed.totalAmount} TL` : 'Görselde Toplam Tutar tespit edilemedi (Selfie / Fiş Dışı Görsel)'),
-          ocrEngineUsed: 'paddleocr',
+          rawOcrText: finalOcrText || (status === 'PROCESSED' ? `${parsed.merchantName} - TOPLAM ${parsed.totalAmount} TL` : 'Görselde Toplam Tutar tespit edilemedi (Selfie / Fiş Dışı Görsel)'),
+          ocrEngineUsed,
           fallbackUsed: false,
         },
       });
@@ -148,7 +163,7 @@ export async function POST(req: NextRequest) {
 
     await enqueueReceiptJob(userId, fileKey);
 
-    console.log(`⚡ [INSTANT DB SAVED]: Receipt ID=${receipt.id} | Status=${receipt.status} | Total=₺${parsed.totalAmount} | Cashback=₺${cashbackAmount}`);
+    console.log(`⚡ [INSTANT DB SAVED]: Receipt ID=${receipt.id} | Status=${receipt.status} | Total=₺${parsed.totalAmount} | Cashback=₺${cashbackAmount} | Engine=${ocrEngineUsed}`);
     console.log('===============================================================\n');
 
     return NextResponse.json({
@@ -160,6 +175,7 @@ export async function POST(req: NextRequest) {
       status: receipt.status,
       totalAmount: parsed.totalAmount,
       cashbackAmount,
+      ocrEngineUsed,
     });
   } catch (error: any) {
     console.error('❌ Error processing receipt:', error);
