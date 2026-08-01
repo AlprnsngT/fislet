@@ -57,7 +57,8 @@ class ReceiptDataParser:
                     except ValueError:
                         continue
 
-        is_valid = bool(vkn and total_amount)
+        # Receipt is valid as long as a valid Total Amount is detected (VKN is optional)
+        is_valid = bool(total_amount and total_amount > 0)
 
         return {
             "vkn": vkn,

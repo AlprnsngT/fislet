@@ -28,11 +28,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Kullanıcı bulunamadı' }, { status: 404 });
     }
 
-    // Default status for incoming raw image: REJECTED until Python Worker processes it or OCR parses valid VKN
-    const status: 'PENDING' | 'PROCESSED' | 'REJECTED' = 'REJECTED';
-    const receiptHash = `rejected_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    // Initial status for uploaded image: PENDING (Waiting for Python OCR Worker)
+    const receiptHash = `pending_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-    console.log(`🔍 [INITIAL SCAN RESULT]: Görselde VKN/Tutar yok -> Status: REJECTED`);
+    console.log(`⏳ [INITIAL RECEIPT QUEUED]: Receipt record created as PENDING...`);
 
     const receipt = await prisma.receipt.create({
       data: {
@@ -44,23 +43,24 @@ export async function POST(req: NextRequest) {
         receiptDate: new Date(),
         totalAmount: 0.00,
         cashbackAmount: 0.00,
-        status: 'REJECTED',
-        rawOcrText: 'Görselde VKN veya Toplam Tutar tespit edilemedi (Selfie / Fiş Dışı Görsel)',
+        status: 'PENDING',
+        rawOcrText: 'Fiş OCR kuyruğunda işleniyor...',
         ocrEngineUsed: 'none',
         fallbackUsed: false,
       },
     });
 
+    // Enqueue job to Upstash Redis for Python OCR Worker
     await enqueueReceiptJob(userId, fileKey);
 
-    console.log(`💾 [NEON POSTGRESQL SAVED]: Receipt ID=${receipt.id} | Status=REJECTED`);
+    console.log(`💾 [NEON POSTGRESQL SAVED]: Receipt ID=${receipt.id} | Status=PENDING`);
     console.log('===============================================================\n');
 
     return NextResponse.json({
       success: true,
-      message: 'Fiş reddedildi: Görselde VKN veya Tutar bulunamadı.',
+      message: 'Fiş yüklendi ve işlenmek üzere kuyruğa alındı.',
       receiptId: receipt.id,
-      status: 'REJECTED',
+      status: 'PENDING',
     });
   } catch (error: any) {
     console.error('❌ Error processing receipt:', error);
