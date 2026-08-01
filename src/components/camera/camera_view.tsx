@@ -3,7 +3,6 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { Camera, RefreshCw, UploadCloud, CheckCircle2, AlertCircle, FileUp, ScanText } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { recognize } from 'tesseract.js';
 
 interface CameraViewProps {
   userId: string;
@@ -118,22 +117,10 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
     if (!capturedImage) return;
 
     setIsUploading(true);
-    setStatusMessage('1/3 Fiş görseli Tesseract OCR ile taranıyor...');
+    setStatusMessage('1/2 Fiş görseli bulut depolama alanına aktarılıyor...');
 
     try {
-      // 1. Run Real Tesseract OCR on the captured receipt image
-      let extractedOcrText = '';
-      try {
-        const ocrResult = await recognize(capturedImage, 'tur+eng');
-        extractedOcrText = ocrResult?.data?.text || '';
-        console.log('🔍 [REAL CLIENT OCR EXTRACTED TEXT]:\n', extractedOcrText);
-      } catch (ocrErr) {
-        console.warn('OCR recognition warning:', ocrErr);
-      }
-
-      setStatusMessage('2/3 Cloudflare R2 Depolama Alanına aktarılıyor...');
-
-      // 2. Fetch presigned upload URL
+      // 1. Fetch presigned upload URL
       const presignedRes = await fetch('/api/v1/receipts/upload-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -143,16 +130,15 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
       const presignedData = await presignedRes.json();
       if (!presignedRes.ok) throw new Error(presignedData.error || 'Upload URL hatası');
 
-      setStatusMessage('3/3 Fiş verileri doğrulanıyor ve kaydediliyor...');
+      setStatusMessage('2/2 Hibrit OCR (PaddleOCR + Google Vision API) ile taranıyor...');
 
-      // 3. Send real extracted OCR text to process API
+      // 2. Send image data to Hybrid Cascade OCR process API
       const processRes = await fetch('/api/v1/receipts/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId,
           fileKey: presignedData.fileKey,
-          rawOcrTextFromClient: extractedOcrText,
         }),
       });
 

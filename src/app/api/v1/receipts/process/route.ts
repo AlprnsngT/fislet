@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { enqueueReceiptJob } from '@/infrastructure/queue/upstash_queue';
 import { prisma } from '@/infrastructure/db/prisma';
 import { parseReceiptText } from '@/shared/utils/receipt_parser';
-import { detectTextWithGoogleVision } from '@/infrastructure/ocr/google_vision_ocr';
+import { runGoogleVisionOCR } from '@/shared/utils/google_vision_ocr';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -10,7 +10,7 @@ export const revalidate = 0;
 export async function POST(req: NextRequest) {
   const timestamp = new Date().toLocaleTimeString('tr-TR');
   console.log('\n===============================================================');
-  console.log(`📸 [${timestamp}] [API INCOMING RECEIPT PROCESS REQUEST]`);
+  console.log(`📸 [${timestamp}] [API INCOMING HYBRID RECEIPT PROCESS REQUEST]`);
 
   try {
     const body = await req.json();
@@ -38,32 +38,29 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Public Image URL in R2 Storage
     const imageUrl = `https://storage.r2.cloudflarestorage.com/fisokut-receipts/${fileKey}`;
 
-    // 2. Multi-Engine OCR Fallback Pipeline:
-    // Tier 1: Client Tesseract.js -> Tier 2: Google Cloud Vision API -> Tier 3: Raw Text
-    let finalOcrText = rawOcrTextFromClient || '';
-    let ocrEngineUsed = 'tesseract.js';
+    // 2. KADEME 1: Primary OCR Pass (PaddleOCR / Client OCR Text)
+    const ocrTextToParse = rawOcrTextFromClient || '';
+    let parsed = parseReceiptText(ocrTextToParse);
+    let ocrEngineUsed = 'paddleocr';
+    let fallbackUsed = false;
 
-    // If client OCR did not yield valid text, try Google Cloud Vision API
-    if (!finalOcrText || finalOcrText.trim().length < 10) {
-      const googleVisionText = await detectTextWithGoogleVision(imageUrl);
-      if (googleVisionText) {
-        finalOcrText = googleVisionText;
-        ocrEngineUsed = 'google_cloud_vision';
+    // 3. KADEME 2: Google Cloud Vision API Fallback (If Primary Pass failed or total amount missing)
+    if (!parsed.isValid || parsed.totalAmount <= 0) {
+      console.log('⚠️ [CASCADE HYBRID OCR]: Kademe 1 toplam tutar bulamadı. Google Cloud Vision API çalıştırılıyor...');
+      const visionParsed = await runGoogleVisionOCR(imageUrl);
+      
+      if (visionParsed && visionParsed.isValid && visionParsed.totalAmount > 0) {
+        console.log('🎯 [GOOGLE VISION SUCCESS]: Fiş verileri Google Vision API ile başarıyla doğrulandı!');
+        parsed = visionParsed;
+        ocrEngineUsed = 'google_vision';
+        fallbackUsed = true;
       }
     }
 
-    const parsed = parseReceiptText(finalOcrText);
-
-    // If explicit non-receipt fileKey pattern (like selfie or photo) and no valid text provided
-    const isExplicitNonReceipt = fileKey.includes('selfie') || fileKey.includes('photo') || !parsed.isValid;
-    if (isExplicitNonReceipt) {
-      parsed.isValid = false;
-      parsed.totalAmount = 0;
-    }
-
-    // 3. DUPLICATE PREVENTION CHECK (Mükerrer Fiş Kontrolü)
+    // 4. DUPLICATE PREVENTION CHECK (Mükerrer Fiş Kontrolü)
     if (parsed.isValid) {
       const existingReceipt = await prisma.receipt.findFirst({
         where: { receiptHash: parsed.compositeHash },
@@ -84,9 +81,9 @@ export async function POST(req: NextRequest) {
             totalAmount: parsed.totalAmount,
             cashbackAmount: 0.00,
             status: 'DUPLICATE',
-            rawOcrText: finalOcrText || 'Mükerrer Fiş (Zaten Kullanılmış)',
+            rawOcrText: ocrTextToParse || 'Mükerrer Fiş (Zaten Kullanılmış)',
             ocrEngineUsed,
-            fallbackUsed: false,
+            fallbackUsed,
           },
         });
 
@@ -100,7 +97,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 4. Determine status and cashback reward
+    // 5. Determine status and cashback reward
     let status: 'PROCESSED' | 'REJECTED' = parsed.isValid ? 'PROCESSED' : 'REJECTED';
     let cashbackAmount = 0.00;
 
@@ -114,7 +111,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. Atomic database transaction in Neon PostgreSQL
+    // 6. Atomic database transaction in Neon PostgreSQL
     const receipt = await prisma.$transaction(async (tx) => {
       const createdReceipt = await tx.receipt.create({
         data: {
@@ -128,9 +125,9 @@ export async function POST(req: NextRequest) {
           totalAmount: parsed.totalAmount,
           cashbackAmount,
           status,
-          rawOcrText: finalOcrText || (status === 'PROCESSED' ? `${parsed.merchantName} - TOPLAM ${parsed.totalAmount} TL` : 'Görselde Toplam Tutar tespit edilemedi (Selfie / Fiş Dışı Görsel)'),
+          rawOcrText: ocrTextToParse || (status === 'PROCESSED' ? `${parsed.merchantName} - TOPLAM ${parsed.totalAmount} TL` : 'Görselde Toplam Tutar tespit edilemedi'),
           ocrEngineUsed,
-          fallbackUsed: false,
+          fallbackUsed,
         },
       });
 
@@ -163,7 +160,7 @@ export async function POST(req: NextRequest) {
 
     await enqueueReceiptJob(userId, fileKey);
 
-    console.log(`⚡ [INSTANT DB SAVED]: Receipt ID=${receipt.id} | Status=${receipt.status} | Total=₺${parsed.totalAmount} | Cashback=₺${cashbackAmount} | Engine=${ocrEngineUsed}`);
+    console.log(`⚡ [INSTANT DB SAVED]: Receipt ID=${receipt.id} | Engine=${ocrEngineUsed} | Status=${receipt.status} | Total=₺${parsed.totalAmount} | Cashback=₺${cashbackAmount}`);
     console.log('===============================================================\n');
 
     return NextResponse.json({
@@ -175,7 +172,6 @@ export async function POST(req: NextRequest) {
       status: receipt.status,
       totalAmount: parsed.totalAmount,
       cashbackAmount,
-      ocrEngineUsed,
     });
   } catch (error: any) {
     console.error('❌ Error processing receipt:', error);
