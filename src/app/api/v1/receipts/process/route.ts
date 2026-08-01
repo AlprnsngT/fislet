@@ -37,13 +37,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 2. Deterministic Receipt Parsing (VKN, Date, ReceiptNo, TotalAmount, CompositeHash)
-    const ocrTextToParse = rawOcrTextFromClient || `A101 MARKET\nVKN: 1234567890\nTARİH: 01.08.2026 14:20\nFIŞ NO: 0042\nTOPLAM: 145.50 TL`;
+    // 2. Parse Raw OCR Text with ZERO Mock Fallbacks
+    const ocrTextToParse = rawOcrTextFromClient || '';
     const parsed = parseReceiptText(ocrTextToParse);
 
-    // If explicit non-receipt fileKey pattern (like selfie) and no text provided
-    const isMockNonReceipt = fileKey.includes('selfie') || fileKey.includes('photo');
-    if (isMockNonReceipt && !rawOcrTextFromClient) {
+    // If explicit non-receipt fileKey pattern (like selfie or photo) and no valid text provided
+    const isExplicitNonReceipt = fileKey.includes('selfie') || fileKey.includes('photo') || !parsed.isValid;
+    if (isExplicitNonReceipt) {
       parsed.isValid = false;
       parsed.totalAmount = 0;
     }
@@ -65,11 +65,11 @@ export async function POST(req: NextRequest) {
             vkn: parsed.vkn,
             merchantName: parsed.merchantName,
             receiptNo: parsed.receiptNo,
-            receiptDate: new Date(),
+            receiptDate: parsed.dateObj,
             totalAmount: parsed.totalAmount,
             cashbackAmount: 0.00,
             status: 'DUPLICATE',
-            rawOcrText: ocrTextToParse,
+            rawOcrText: ocrTextToParse || 'Mükerrer Fiş (Zaten Kullanılmış)',
             ocrEngineUsed: 'paddleocr',
             fallbackUsed: false,
           },
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
           success: false,
           isDuplicate: true,
-          message: '❌ Bu fiş daha önce sisteme taranmış! Mükerrer fişler tekrar kabul edilmez.',
+          message: '❌ Bu fiş daha önce sisteme taranmış! Mükerrer fiş kabul edilmez.',
           receiptId: duplicateRecord.id,
           status: 'DUPLICATE',
         }, { status: 400 });
@@ -109,11 +109,11 @@ export async function POST(req: NextRequest) {
           vkn: parsed.vkn,
           merchantName: parsed.merchantName,
           receiptNo: parsed.receiptNo,
-          receiptDate: new Date(),
+          receiptDate: parsed.dateObj,
           totalAmount: parsed.totalAmount,
           cashbackAmount,
           status,
-          rawOcrText: ocrTextToParse,
+          rawOcrText: ocrTextToParse || (status === 'PROCESSED' ? `${parsed.merchantName} - TOPLAM ${parsed.totalAmount} TL` : 'Görselde Toplam Tutar tespit edilemedi (Selfie / Fiş Dışı Görsel)'),
           ocrEngineUsed: 'paddleocr',
           fallbackUsed: false,
         },
