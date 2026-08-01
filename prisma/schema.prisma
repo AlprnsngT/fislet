@@ -119,3 +119,12 @@ model WalletTransaction {
 
   @@map("wallet_transactions")
 }
+
+model SystemConfig {
+  id            String   @id @default("default")
+  cashbackType  String   @default("PERCENTAGE")
+  cashbackValue Decimal  @default(10.00) @db.Decimal(10, 2)
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("system_configs")
+}

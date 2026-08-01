@@ -29,19 +29,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Kullanıcı bulunamadı' }, { status: 404 });
     }
 
-    // Fast instant inline evaluation (< 1 sec response time for instant UI feedback)
-    // Checks if the file contains price pattern / total amount or valid thermal receipt characteristics
+    // Fetch active dynamic SystemConfig from Neon DB
+    let systemConfig = await prisma.systemConfig.findUnique({ where: { id: 'default' } });
+    if (!systemConfig) {
+      systemConfig = await prisma.systemConfig.create({
+        data: { id: 'default', cashbackType: 'PERCENTAGE', cashbackValue: 10.00 },
+      });
+    }
+
     const isThermalReceipt = fileKey.includes('receipt') || fileKey.includes('fis') || Boolean(rawOcrTextFromClient);
 
     let status: 'PROCESSED' | 'REJECTED' = 'PROCESSED';
     let vkn: string | null = '1234567890';
     let merchantName = 'MARKET / MAĞAZA';
     let receiptNo: string | null = `F-${Math.floor(1000 + Math.random() * 9000)}`;
-    let totalAmount = 145.50;
-    let cashbackAmount = 7.28; // %5 cashback
-    let rawOcrText = rawOcrTextFromClient || 'A101 MARKET - TOPLAM 145.50 TL - VKN 1234567890';
+    let totalAmount = 150.00;
+    
+    // Dynamic Cashback Calculation based on SystemConfig
+    const configValue = Number(systemConfig.cashbackValue);
+    let cashbackAmount = 0.00;
 
-    // If explicit non-receipt or empty file pattern detected
+    if (systemConfig.cashbackType === 'FIXED') {
+      cashbackAmount = configValue;
+    } else {
+      // PERCENTAGE mode (e.g. 10%)
+      cashbackAmount = roundToTwo((totalAmount * configValue) / 100);
+    }
+
+    let rawOcrText = rawOcrTextFromClient || `A101 MARKET - TOPLAM ${totalAmount.toFixed(2)} TL - VKN 1234567890`;
+
     if (!isThermalReceipt) {
       status = 'REJECTED';
       vkn = null;
@@ -56,7 +72,7 @@ export async function POST(req: NextRequest) {
       ? createHash('sha256').update(`${vkn || 'novkn'}_${Date.now()}_${totalAmount}`).digest('hex')
       : `rejected_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-    // Atomic database update directly in Neon PostgreSQL (< 1 sec)
+    // Atomic database update in Neon PostgreSQL
     const receipt = await prisma.$transaction(async (tx) => {
       const createdReceipt = await tx.receipt.create({
         data: {
@@ -76,7 +92,6 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Credit 5% cashback to user wallet if processed
       if (status === 'PROCESSED' && cashbackAmount > 0) {
         let wallet = await tx.wallet.findUnique({ where: { userId } });
         if (!wallet) {
@@ -96,7 +111,7 @@ export async function POST(req: NextRequest) {
             receiptId: createdReceipt.id,
             amount: cashbackAmount,
             transactionType: 'CASHBACK_REWARD',
-            description: `%5 Cashback Ödülü (${merchantName})`,
+            description: `Cashback Ödülü (${merchantName}) - Rate: ${systemConfig?.cashbackType === 'FIXED' ? `₺${configValue}` : `%${configValue}`}`,
           },
         });
       }
@@ -104,10 +119,9 @@ export async function POST(req: NextRequest) {
       return createdReceipt;
     });
 
-    // Also background queue enqueue
     await enqueueReceiptJob(userId, fileKey);
 
-    console.log(`⚡ [INSTANT DB SAVED]: Receipt ID=${receipt.id} | Status=${receipt.status} | Total=₺${totalAmount}`);
+    console.log(`⚡ [INSTANT DB SAVED]: Receipt ID=${receipt.id} | Status=${receipt.status} | Total=₺${totalAmount} | Cashback=₺${cashbackAmount}`);
     console.log('===============================================================\n');
 
     return NextResponse.json({
@@ -124,4 +138,8 @@ export async function POST(req: NextRequest) {
     console.error('❌ Error processing receipt:', error);
     return NextResponse.json({ error: 'Fiş işlenirken bir hata oluştu' }, { status: 500 });
   }
+}
+
+function roundToTwo(num: number): number {
+  return Math.round((num + Number.EPSILON) * 100) / 100;
 }
