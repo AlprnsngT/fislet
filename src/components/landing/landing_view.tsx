@@ -21,7 +21,7 @@ export const LandingView: React.FC = () => {
       <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-600/15 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-teal-500/10 rounded-full blur-[120px] pointer-events-none" />
 
-      {/* Header Bar with SINGLE Primary CTA Button: Kazanmaya Başla */}
+      {/* Clean Header Bar with Brand Logo Only */}
       <nav className="w-full max-w-6xl mx-auto px-6 py-6 flex justify-between items-center z-10">
         <div className="flex items-center space-x-2">
           <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
@@ -30,16 +30,6 @@ export const LandingView: React.FC = () => {
           <span className="text-xl font-black tracking-tight text-white">
             FISOKUT<span className="text-emerald-400">-KAZAN</span>
           </span>
-        </div>
-
-        <div>
-          <button
-            onClick={() => openAuthModal('login')}
-            className="glass-button px-6 py-2.5 rounded-xl text-xs font-extrabold text-white shadow-lg flex items-center space-x-2 active:scale-95 transition-transform"
-          >
-            <span>Kazanmaya Başla</span>
-            <ArrowRight className="w-4 h-4 text-emerald-400" />
-          </button>
         </div>
       </nav>
 
@@ -64,6 +54,7 @@ export const LandingView: React.FC = () => {
           </p>
 
           <div className="pt-4 flex flex-col sm:flex-row items-center justify-center lg:justify-start space-y-3 sm:space-y-0 sm:space-x-4">
+            {/* SINGLE PRIMARY CTA BUTTON: Kazanmaya Başla */}
             <button
               onClick={() => openAuthModal('login')}
               className="w-full sm:w-auto glass-button px-8 py-4 rounded-2xl text-base font-extrabold text-white flex items-center justify-center space-x-3 shadow-xl active:scale-95 transition-transform"
