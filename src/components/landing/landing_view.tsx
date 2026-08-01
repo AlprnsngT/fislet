@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Camera, Zap, ShieldCheck, ArrowRight, Sparkles, Receipt, Wallet, Award } from 'lucide-react';
+import { Camera, Zap, ShieldCheck, ArrowRight, Sparkles, Wallet } from 'lucide-react';
 import { useAuthStore } from '@/shared/stores/auth_store';
 
 export const LandingView: React.FC = () => {
@@ -11,7 +11,7 @@ export const LandingView: React.FC = () => {
   const sliderItems = [
     { icon: Camera, title: 'Fişini Tara', desc: 'Alışveriş fişinin fotoğrafını çek veya yükle.', color: 'from-emerald-500 to-teal-500' },
     { icon: Zap, title: 'Yapay Zeka OCR', desc: 'PaddleOCR ve Vision API ile anında doğrulama.', color: 'from-green-400 to-emerald-600' },
-    { icon: Wallet, title: '%5 Cashback', desc: 'Fiş tutarının %5\'i anında cüzdanına yansısın.', color: 'from-teal-400 to-green-500' },
+    { icon: Wallet, title: '%10 Cashback', desc: 'Fiş tutarının %10\'u anında cüzdanına yansısın.', color: 'from-teal-400 to-green-500' },
     { icon: ShieldCheck, title: 'Mükerrer Koruması', desc: 'SHA-256 composite hash ile %100 güvenli.', color: 'from-emerald-600 to-emerald-900' },
   ];
 
@@ -21,7 +21,7 @@ export const LandingView: React.FC = () => {
       <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-600/15 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-teal-500/10 rounded-full blur-[120px] pointer-events-none" />
 
-      {/* Header Bar */}
+      {/* Header Bar with SINGLE Primary CTA Button: Kazanmaya Başla */}
       <nav className="w-full max-w-6xl mx-auto px-6 py-6 flex justify-between items-center z-10">
         <div className="flex items-center space-x-2">
           <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
@@ -32,20 +32,13 @@ export const LandingView: React.FC = () => {
           </span>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div>
           <button
             onClick={() => openAuthModal('login')}
-            className="px-4 py-2 text-xs font-semibold text-gray-300 hover:text-white transition-colors"
+            className="glass-button px-6 py-2.5 rounded-xl text-xs font-extrabold text-white shadow-lg flex items-center space-x-2 active:scale-95 transition-transform"
           >
-            Giriş Yap
-          </button>
-
-          <button
-            onClick={() => openAuthModal('register')}
-            className="glass-button px-5 py-2.5 rounded-xl text-xs font-bold text-white shadow-lg flex items-center space-x-1.5"
-          >
-            <span>Kayıt Ol</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <span>Kazanmaya Başla</span>
+            <ArrowRight className="w-4 h-4 text-emerald-400" />
           </button>
         </div>
       </nav>
@@ -67,12 +60,12 @@ export const LandingView: React.FC = () => {
           </h1>
 
           <p className="text-base text-gray-300 max-w-xl mx-auto lg:mx-0 font-normal leading-relaxed">
-            Market, restoran ve alışveriş fişlerini kameranla tara; yapay zeka OCR motorumuz fişini anında doğrulasın ve harcamanın %5'ini cüzdanına iade etsin.
+            Market, restoran ve alışveriş fişlerini kameranla tara; yapay zeka OCR motorumuz fişini anında doğrulasın ve harcamanın %10'unu cüzdanına iade etsin.
           </p>
 
           <div className="pt-4 flex flex-col sm:flex-row items-center justify-center lg:justify-start space-y-3 sm:space-y-0 sm:space-x-4">
             <button
-              onClick={() => openAuthModal('register')}
+              onClick={() => openAuthModal('login')}
               className="w-full sm:w-auto glass-button px-8 py-4 rounded-2xl text-base font-extrabold text-white flex items-center justify-center space-x-3 shadow-xl active:scale-95 transition-transform"
             >
               <span>Kazanmaya Başla</span>
@@ -81,12 +74,12 @@ export const LandingView: React.FC = () => {
 
             <div className="flex items-center space-x-2 text-xs text-gray-400">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Ücretsiz Kaydol • Kredi Kartı Gerekmez</span>
+              <span>Ücretsiz Kaydol / Giriş Yap • Kredi Kartı Gerekmez</span>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Diagonal Slider / Feature Marquee */}
+        {/* Right Column: Feature Cards */}
         <div className="flex-1 w-full relative max-w-md lg:max-w-none">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 transform lg:rotate-[-3deg] lg:hover:rotate-0 transition-transform duration-500">
             {sliderItems.map((item, idx) => {

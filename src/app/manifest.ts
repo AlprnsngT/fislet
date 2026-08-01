@@ -2,13 +2,16 @@ import { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'FISOKUT-KAZAN',
+    id: 'fisokut-pwa-app',
+    name: 'FISOKUT-KAZAN | Fiş Tara & Cashback Kazan',
     short_name: 'FisOkut',
-    description: 'Fişlerini Tara, Anında Nakit Cashback Kazan!',
+    description: 'Alışveriş fişlerini tara, yapay zeka OCR ile anında nakit cashback kazan!',
     start_url: '/',
     display: 'standalone',
+    orientation: 'portrait',
     background_color: '#090d16',
     theme_color: '#8b5cf6',
+    categories: ['shopping', 'finance', 'utilities'],
     icons: [
       {
         src: '/icons/icon-192x192.png',
@@ -33,6 +36,11 @@ export default function manifest(): MetadataRoute.Manifest {
         sizes: '512x512',
         type: 'image/png',
         purpose: 'maskable',
+      },
+      {
+        src: '/apple-touch-icon.png',
+        sizes: '180x180',
+        type: 'image/png',
       },
       {
         src: '/Logo.png',

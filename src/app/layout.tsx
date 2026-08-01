@@ -42,12 +42,18 @@ export default function RootLayout({
     <html lang="tr" className="dark">
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="FisOkut" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="application-name" content="FisOkut" />
+        <meta name="msapplication-TileColor" content="#8b5cf6" />
       </head>
       <body className="bg-[#090d16] text-gray-100 antialiased min-h-screen">
         {children}
 
-        {/* Service Worker Registration for Desktop & Mobile PWA Installation */}
+        {/* Service Worker Registration for macOS Desktop, Windows, iOS, Android PWA Installation */}
         <Script id="register-sw" strategy="afterInteractive">
           {`
             if ('serviceWorker' in navigator) {
