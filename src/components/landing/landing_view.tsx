@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Camera, Zap, ShieldCheck, ArrowRight, Sparkles, Wallet } from 'lucide-react';
+import { Camera, Zap, ShieldCheck, ArrowRight, Sparkles, Receipt, Wallet, Award } from 'lucide-react';
 import { useAuthStore } from '@/shared/stores/auth_store';
 
 export const LandingView: React.FC = () => {
@@ -11,21 +11,21 @@ export const LandingView: React.FC = () => {
   const sliderItems = [
     { icon: Camera, title: 'Fişini Tara', desc: 'Alışveriş fişinin fotoğrafını çek veya yükle.', color: 'from-emerald-500 to-teal-500' },
     { icon: Zap, title: 'Yapay Zeka OCR', desc: 'PaddleOCR ve Vision API ile anında doğrulama.', color: 'from-green-400 to-emerald-600' },
-    { icon: Wallet, title: '%10 Cashback', desc: 'Fiş tutarının %10\'u anında cüzdanına yansısın.', color: 'from-teal-400 to-green-500' },
+    { icon: Wallet, title: '%5 Cashback', desc: 'Fiş tutarının %5\'i anında cüzdanına yansısın.', color: 'from-teal-400 to-green-500' },
     { icon: ShieldCheck, title: 'Mükerrer Koruması', desc: 'SHA-256 composite hash ile %100 güvenli.', color: 'from-emerald-600 to-emerald-900' },
   ];
 
   return (
-    <div className="relative min-h-screen bg-[#070a12] text-gray-100 flex flex-col justify-between overflow-hidden">
+    <div className="relative min-h-screen bg-[#090d16] text-gray-100 flex flex-col justify-between overflow-hidden">
       {/* Background Ambient Glows */}
-      <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-purple-600/15 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-600/15 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-teal-500/10 rounded-full blur-[120px] pointer-events-none" />
 
       {/* Header Bar */}
       <nav className="w-full max-w-6xl mx-auto px-6 py-6 flex justify-between items-center z-10">
-        <div className="flex items-center space-x-3">
-          <div className="p-1 rounded-2xl bg-purple-500/10 border border-purple-500/30">
-            <img src="/Logo.png" alt="FISOKUT Logo" className="w-10 h-10 object-contain rounded-xl" />
+        <div className="flex items-center space-x-2">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+            <Zap className="w-5 h-5 text-emerald-400 fill-emerald-400" />
           </div>
           <span className="text-xl font-black tracking-tight text-white">
             FISOKUT<span className="text-emerald-400">-KAZAN</span>
@@ -54,20 +54,20 @@ export const LandingView: React.FC = () => {
       <main className="w-full max-w-6xl mx-auto px-6 py-12 flex flex-col lg:flex-row items-center justify-between gap-12 z-10 my-auto">
         {/* Left Column: Hero Text */}
         <div className="flex-1 text-center lg:text-left space-y-6">
-          <div className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-semibold">
-            <Sparkles className="w-4 h-4 animate-spin text-purple-400" />
+          <div className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+            <Sparkles className="w-4 h-4 animate-spin" />
             <span>Türkiye'nin Akıllı Fiş Tarama & Nakit İade Platformu</span>
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white leading-tight tracking-tight">
             Alışveriş Fişlerini Okut, <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-purple-400">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-green-500">
               Anında Cashback Kazan!
             </span>
           </h1>
 
           <p className="text-base text-gray-300 max-w-xl mx-auto lg:mx-0 font-normal leading-relaxed">
-            Market, restoran ve alışveriş fişlerini kameranla tara; yapay zeka OCR motorumuz fişini anında doğrulasın ve harcamanın %10'unu cüzdanına iade etsin.
+            Market, restoran ve alışveriş fişlerini kameranla tara; yapay zeka OCR motorumuz fişini anında doğrulasın ve harcamanın %5'ini cüzdanına iade etsin.
           </p>
 
           <div className="pt-4 flex flex-col sm:flex-row items-center justify-center lg:justify-start space-y-3 sm:space-y-0 sm:space-x-4">
@@ -86,7 +86,7 @@ export const LandingView: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Column: Feature Cards */}
+        {/* Right Column: Diagonal Slider / Feature Marquee */}
         <div className="flex-1 w-full relative max-w-md lg:max-w-none">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 transform lg:rotate-[-3deg] lg:hover:rotate-0 transition-transform duration-500">
             {sliderItems.map((item, idx) => {

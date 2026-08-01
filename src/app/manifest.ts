@@ -7,8 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     description: 'Fişlerini Tara, Anında Nakit Cashback Kazan!',
     start_url: '/',
     display: 'standalone',
-    orientation: 'portrait',
-    background_color: '#070a12',
+    background_color: '#090d16',
     theme_color: '#8b5cf6',
     icons: [
       {
@@ -34,6 +33,11 @@ export default function manifest(): MetadataRoute.Manifest {
         sizes: '512x512',
         type: 'image/png',
         purpose: 'maskable',
+      },
+      {
+        src: '/Logo.png',
+        sizes: '512x512',
+        type: 'image/png',
       },
     ],
   };

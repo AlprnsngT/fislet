@@ -2,6 +2,7 @@
 
 import React from 'react';
 import {
+  ShieldCheck,
   LayoutDashboard,
   Activity,
   Package,
@@ -36,8 +37,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       <div>
         {/* Logo & Brand */}
         <div className="flex items-center space-x-3 mb-8 px-2">
-          <div className="p-1 rounded-xl bg-purple-500/10 border border-purple-500/30">
-            <img src="/Logo.png" alt="FISOKUT Logo" className="w-9 h-9 object-contain rounded-lg" />
+          <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-400">
+            <ShieldCheck className="w-6 h-6" />
           </div>
           <div>
             <div className="text-base font-black text-white tracking-wide">

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Lock, User, LogIn, UserPlus, AlertCircle, Loader2, AtSign } from 'lucide-react';
+import { X, Mail, Lock, User, LogIn, UserPlus, AlertCircle, Loader2, AtSign } from 'lucide-react';
 import { useAuthStore } from '@/shared/stores/auth_store';
 
 export const AuthModal: React.FC = () => {
@@ -72,11 +72,8 @@ export const AuthModal: React.FC = () => {
             <X className="w-5 h-5" />
           </button>
 
-          {/* Logo & Title */}
-          <div className="text-center mb-6 flex flex-col items-center">
-            <div className="p-2 rounded-2xl bg-purple-500/10 border border-purple-500/30 mb-3 shadow-lg">
-              <img src="/Logo.png" alt="FISOKUT Logo" className="w-14 h-14 object-contain rounded-xl" />
-            </div>
+          {/* Title & Tabs */}
+          <div className="text-center mb-6">
             <h2 className="text-2xl font-black text-white tracking-tight">
               FISOKUT<span className="text-emerald-400">-KAZAN</span>
             </h2>

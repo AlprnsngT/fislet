@@ -85,23 +85,18 @@ export const DashboardView: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#070a12] text-gray-100 pb-16 px-4 pt-6 max-w-lg mx-auto space-y-6">
-      {/* Header with App Logo */}
-      <header className="flex justify-between items-center bg-gray-900/80 p-4 rounded-2xl border border-gray-800 shadow-lg">
-        <div className="flex items-center space-x-3">
-          <div className="p-1 rounded-xl bg-purple-500/10 border border-purple-500/30">
-            <img src="/Logo.png" alt="FisOkut Logo" className="w-10 h-10 object-contain rounded-lg" />
-          </div>
-          <div>
-            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Hoş Geldin</span>
-            <h1 className="text-base font-black text-white">{user?.name || user?.username}</h1>
-            <p className="text-[11px] text-gray-400">{user?.email}</p>
-          </div>
+    <div className="min-h-screen bg-[#090d16] text-gray-100 pb-16 px-4 pt-6 max-w-lg mx-auto space-y-6">
+      {/* Header */}
+      <header className="flex justify-between items-center bg-gray-900/60 p-4 rounded-2xl border border-gray-800">
+        <div>
+          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Hoş Geldin</span>
+          <h1 className="text-lg font-black text-white">{user?.name}</h1>
+          <p className="text-xs text-gray-400">{user?.email}</p>
         </div>
 
         <button
           onClick={logout}
-          className="p-2.5 rounded-xl bg-gray-800/80 text-gray-400 hover:text-red-400 hover:bg-gray-700 transition-colors flex items-center space-x-1 text-xs font-semibold"
+          className="p-2.5 rounded-xl bg-gray-800 text-gray-400 hover:text-red-400 hover:bg-gray-700 transition-colors flex items-center space-x-1 text-xs font-semibold"
           title="Çıkış Yap"
         >
           <LogOut className="w-4 h-4" />
