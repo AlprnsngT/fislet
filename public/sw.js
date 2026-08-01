@@ -9,5 +9,10 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Pass-through fetch for network requests
+  // Active fetch listener required by Chrome Lighthouse & Desktop PWA install prompt
+  event.respondWith(
+    fetch(event.request).catch(() => {
+      return caches.match(event.request);
+    })
+  );
 });

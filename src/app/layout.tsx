@@ -53,14 +53,14 @@ export default function RootLayout({
       <body className="bg-[#090d16] text-gray-100 antialiased min-h-screen">
         {children}
 
-        {/* Service Worker Registration for macOS Desktop, Windows, iOS, Android PWA Installation */}
+        {/* Active PWA Service Worker Registration */}
         <Script id="register-sw" strategy="afterInteractive">
           {`
             if ('serviceWorker' in navigator) {
               window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/sw.js').then(
+                navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(
                   function(reg) {
-                    console.log('PWA ServiceWorker registered successfully:', reg.scope);
+                    console.log('PWA ServiceWorker registered with scope:', reg.scope);
                   },
                   function(err) {
                     console.warn('PWA ServiceWorker registration failed:', err);

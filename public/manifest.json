@@ -1,39 +1,28 @@
 {
   "id": "fisokut-pwa-app",
-  "name": "FISOKUT-KAZAN | Fiş Tara & Cashback Kazan",
+  "name": "FISOKUT-KAZAN",
   "short_name": "FisOkut",
   "description": "Alışveriş fişlerini tara, yapay zeka OCR ile anında nakit cashback kazan!",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "portrait-primary",
   "background_color": "#090d16",
   "theme_color": "#8b5cf6",
+  "prefer_related_applications": false,
   "categories": ["shopping", "finance", "utilities"],
   "icons": [
     {
       "src": "/icons/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/icon-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     },
     {
       "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/icon-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     },
     {
       "src": "/apple-touch-icon.png",
