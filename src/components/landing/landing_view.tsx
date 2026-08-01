@@ -4,6 +4,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Camera, Zap, ShieldCheck, ArrowRight, Sparkles, Wallet } from 'lucide-react';
 import { useAuthStore } from '@/shared/stores/auth_store';
+import { PwaInstallButton } from '@/components/pwa/pwa_install_button';
 
 export const LandingView: React.FC = () => {
   const { openAuthModal } = useAuthStore();
@@ -21,7 +22,7 @@ export const LandingView: React.FC = () => {
       <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-600/15 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-teal-500/10 rounded-full blur-[120px] pointer-events-none" />
 
-      {/* Clean Header Bar with Brand Logo Only */}
+      {/* Header Bar with Logo and Manual PWA Install Button */}
       <nav className="w-full max-w-6xl mx-auto px-6 py-6 flex justify-between items-center z-10">
         <div className="flex items-center space-x-2">
           <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
@@ -30,6 +31,11 @@ export const LandingView: React.FC = () => {
           <span className="text-xl font-black tracking-tight text-white">
             FISOKUT<span className="text-emerald-400">-KAZAN</span>
           </span>
+        </div>
+
+        {/* Manual PWA Install Button */}
+        <div>
+          <PwaInstallButton />
         </div>
       </nav>
 
