@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { enqueueReceiptJob } from '@/infrastructure/queue/upstash_queue';
 import { prisma } from '@/infrastructure/db/prisma';
-import { createHash } from 'crypto';
+import { parseReceiptText } from '@/shared/utils/receipt_parser';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Kullanıcı bulunamadı' }, { status: 404 });
     }
 
-    // Fetch active dynamic SystemConfig from Neon DB
+    // 1. Fetch active dynamic SystemConfig from Neon DB
     let systemConfig = await prisma.systemConfig.findUnique({ where: { id: 'default' } });
     if (!systemConfig) {
       systemConfig = await prisma.systemConfig.create({
@@ -37,57 +37,84 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const isThermalReceipt = fileKey.includes('receipt') || fileKey.includes('fis') || Boolean(rawOcrTextFromClient);
+    // 2. Deterministic Receipt Parsing (VKN, Date, ReceiptNo, TotalAmount, CompositeHash)
+    const ocrTextToParse = rawOcrTextFromClient || `A101 MARKET\nVKN: 1234567890\nTARİH: 01.08.2026 14:20\nFIŞ NO: 0042\nTOPLAM: 145.50 TL`;
+    const parsed = parseReceiptText(ocrTextToParse);
 
-    let status: 'PROCESSED' | 'REJECTED' = 'PROCESSED';
-    let vkn: string | null = '1234567890';
-    let merchantName = 'MARKET / MAĞAZA';
-    let receiptNo: string | null = `F-${Math.floor(1000 + Math.random() * 9000)}`;
-    let totalAmount = 150.00;
-    
-    // Dynamic Cashback Calculation based on SystemConfig
-    const configValue = Number(systemConfig.cashbackValue);
+    // If explicit non-receipt fileKey pattern (like selfie) and no text provided
+    const isMockNonReceipt = fileKey.includes('selfie') || fileKey.includes('photo');
+    if (isMockNonReceipt && !rawOcrTextFromClient) {
+      parsed.isValid = false;
+      parsed.totalAmount = 0;
+    }
+
+    // 3. DUPLICATE PREVENTION CHECK (Mükerrer Fiş Kontrolü)
+    if (parsed.isValid) {
+      const existingReceipt = await prisma.receipt.findFirst({
+        where: { receiptHash: parsed.compositeHash },
+      });
+
+      if (existingReceipt) {
+        console.log(`⚠️ [DUPLICATE DETECTED]: Fiş daha önce okutulmuş! Hash=${parsed.compositeHash}`);
+        
+        const duplicateRecord = await prisma.receipt.create({
+          data: {
+            userId,
+            receiptHash: `dup_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+            imageUrl: `https://storage.r2.cloudflarestorage.com/fisokut-receipts/${fileKey}`,
+            vkn: parsed.vkn,
+            merchantName: parsed.merchantName,
+            receiptNo: parsed.receiptNo,
+            receiptDate: new Date(),
+            totalAmount: parsed.totalAmount,
+            cashbackAmount: 0.00,
+            status: 'DUPLICATE',
+            rawOcrText: ocrTextToParse,
+            ocrEngineUsed: 'paddleocr',
+            fallbackUsed: false,
+          },
+        });
+
+        return NextResponse.json({
+          success: false,
+          isDuplicate: true,
+          message: '❌ Bu fiş daha önce sisteme taranmış! Mükerrer fişler tekrar kabul edilmez.',
+          receiptId: duplicateRecord.id,
+          status: 'DUPLICATE',
+        }, { status: 400 });
+      }
+    }
+
+    // 4. Determine status and cashback reward
+    let status: 'PROCESSED' | 'REJECTED' = parsed.isValid ? 'PROCESSED' : 'REJECTED';
     let cashbackAmount = 0.00;
 
-    if (systemConfig.cashbackType === 'FIXED') {
-      cashbackAmount = configValue;
-    } else {
-      // PERCENTAGE mode (e.g. 10%)
-      cashbackAmount = roundToTwo((totalAmount * configValue) / 100);
+    if (status === 'PROCESSED') {
+      const configValue = Number(systemConfig.cashbackValue);
+      if (systemConfig.cashbackType === 'FIXED') {
+        cashbackAmount = configValue;
+      } else {
+        // PERCENTAGE mode (Default %10)
+        cashbackAmount = Math.round(((parsed.totalAmount * configValue) / 100 + Number.EPSILON) * 100) / 100;
+      }
     }
 
-    let rawOcrText = rawOcrTextFromClient || `A101 MARKET - TOPLAM ${totalAmount.toFixed(2)} TL - VKN 1234567890`;
-
-    if (!isThermalReceipt) {
-      status = 'REJECTED';
-      vkn = null;
-      merchantName = 'Geçersiz Görsel';
-      receiptNo = null;
-      totalAmount = 0.00;
-      cashbackAmount = 0.00;
-      rawOcrText = 'Görselde VKN veya Toplam Tutar tespit edilemedi (Selfie / Fiş Dışı Görsel)';
-    }
-
-    const receiptHash = status === 'PROCESSED'
-      ? createHash('sha256').update(`${vkn || 'novkn'}_${Date.now()}_${totalAmount}`).digest('hex')
-      : `rejected_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-
-    // Atomic database update in Neon PostgreSQL
+    // 5. Atomic database transaction in Neon PostgreSQL
     const receipt = await prisma.$transaction(async (tx) => {
       const createdReceipt = await tx.receipt.create({
         data: {
           userId,
-          receiptHash,
+          receiptHash: parsed.compositeHash,
           imageUrl: `https://storage.r2.cloudflarestorage.com/fisokut-receipts/${fileKey}`,
-          vkn,
-          merchantName,
-          receiptNo,
+          vkn: parsed.vkn,
+          merchantName: parsed.merchantName,
+          receiptNo: parsed.receiptNo,
           receiptDate: new Date(),
-          totalAmount,
+          totalAmount: parsed.totalAmount,
           cashbackAmount,
           status,
-          rawOcrText,
-          ocrEngineUsed: 'paddleocr_fast',
+          rawOcrText: ocrTextToParse,
+          ocrEngineUsed: 'paddleocr',
           fallbackUsed: false,
         },
       });
@@ -111,7 +138,7 @@ export async function POST(req: NextRequest) {
             receiptId: createdReceipt.id,
             amount: cashbackAmount,
             transactionType: 'CASHBACK_REWARD',
-            description: `Cashback Ödülü (${merchantName}) - Rate: ${systemConfig?.cashbackType === 'FIXED' ? `₺${configValue}` : `%${configValue}`}`,
+            description: `Cashback Ödülü (${parsed.merchantName})`,
           },
         });
       }
@@ -121,7 +148,7 @@ export async function POST(req: NextRequest) {
 
     await enqueueReceiptJob(userId, fileKey);
 
-    console.log(`⚡ [INSTANT DB SAVED]: Receipt ID=${receipt.id} | Status=${receipt.status} | Total=₺${totalAmount} | Cashback=₺${cashbackAmount}`);
+    console.log(`⚡ [INSTANT DB SAVED]: Receipt ID=${receipt.id} | Status=${receipt.status} | Total=₺${parsed.totalAmount} | Cashback=₺${cashbackAmount}`);
     console.log('===============================================================\n');
 
     return NextResponse.json({
@@ -131,15 +158,11 @@ export async function POST(req: NextRequest) {
         : 'Fiş reddedildi: Görselde Toplam Tutar tespit edilemedi.',
       receiptId: receipt.id,
       status: receipt.status,
-      totalAmount,
+      totalAmount: parsed.totalAmount,
       cashbackAmount,
     });
   } catch (error: any) {
     console.error('❌ Error processing receipt:', error);
     return NextResponse.json({ error: 'Fiş işlenirken bir hata oluştu' }, { status: 500 });
   }
-}
-
-function roundToTwo(num: number): number {
-  return Math.round((num + Number.EPSILON) * 100) / 100;
 }

@@ -3,14 +3,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { CameraView } from '@/components/camera/camera_view';
 import { WalletCard } from '@/components/wallet/wallet_card';
+import { ReceiptDetailModal } from '@/components/receipts/receipt_detail_modal';
 import { useAuthStore } from '@/shared/stores/auth_store';
-import { LogOut, CheckCircle, Clock, AlertTriangle, XCircle, Inbox, RefreshCw } from 'lucide-react';
+import { LogOut, CheckCircle, Clock, AlertTriangle, XCircle, Inbox, RefreshCw, Eye } from 'lucide-react';
 
 export const DashboardView: React.FC = () => {
   const { user, logout } = useAuthStore();
   const [balance, setBalance] = useState<number>(0.0);
   const [receipts, setReceipts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [selectedReceipt, setSelectedReceipt] = useState<any | null>(null);
 
   const fetchUserData = useCallback(async () => {
     if (!user) return;
@@ -41,7 +43,6 @@ export const DashboardView: React.FC = () => {
   }, [fetchUserData]);
 
   const handleScanComplete = () => {
-    // Refresh instantly and again after 2s
     fetchUserData();
     setTimeout(() => {
       fetchUserData();
@@ -64,7 +65,7 @@ export const DashboardView: React.FC = () => {
         };
       case 'REJECTED':
         return {
-          label: 'Reddedildi (Geçersiz Fiş / VKN Yok)',
+          label: 'Reddedildi (Tutar Okunamadı)',
           color: 'bg-red-500/10 text-red-400 border-red-500/30',
           icon: XCircle,
         };
@@ -114,7 +115,10 @@ export const DashboardView: React.FC = () => {
       {/* Receipts History & Status Section */}
       <section className="glass-card p-5 rounded-3xl space-y-4 border border-gray-800">
         <div className="flex justify-between items-center">
-          <h3 className="text-sm font-bold text-white">Fiş Durumlarınız & Geçmiş</h3>
+          <div>
+            <h3 className="text-sm font-bold text-white">Fiş Durumlarınız & Geçmiş</h3>
+            <p className="text-[10px] text-gray-400">Okunan verileri görmek için fiş kartına tıklayın</p>
+          </div>
           <button
             onClick={fetchUserData}
             className="p-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition-colors"
@@ -137,14 +141,19 @@ export const DashboardView: React.FC = () => {
               const BadgeIcon = badge.icon;
 
               return (
-                <div key={item.id} className="p-3.5 rounded-2xl bg-gray-900/80 border border-gray-800 flex justify-between items-center">
+                <div
+                  key={item.id}
+                  onClick={() => setSelectedReceipt(item)}
+                  className="p-3.5 rounded-2xl bg-gray-900/80 border border-gray-800 hover:border-emerald-500/40 cursor-pointer transition-all flex justify-between items-center group"
+                >
                   <div className="flex items-center space-x-3">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${badge.color}`}>
                       <BadgeIcon className="w-5 h-5" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-white">
-                        {item.status === 'PROCESSED' ? `Fiş No: ${item.receiptNo}` : 'Gönderilen Görsel'}
+                      <h4 className="text-xs font-bold text-white group-hover:text-emerald-400 transition-colors flex items-center space-x-1">
+                        <span>{item.merchantName || (item.status === 'PROCESSED' ? `Fiş No: ${item.receiptNo}` : 'Gönderilen Görsel')}</span>
+                        <Eye className="w-3 h-3 text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </h4>
                       <p className="text-[10px] text-gray-500">
                         {new Date(item.createdAt).toLocaleString('tr-TR')}
@@ -163,6 +172,12 @@ export const DashboardView: React.FC = () => {
           </div>
         )}
       </section>
+
+      {/* Interactive Receipt Detail & Inspection Modal */}
+      <ReceiptDetailModal
+        receipt={selectedReceipt}
+        onClose={() => setSelectedReceipt(null)}
+      />
     </div>
   );
 };
