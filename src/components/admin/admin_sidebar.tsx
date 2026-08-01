@@ -4,7 +4,7 @@ import React from 'react';
 import {
   ShieldCheck,
   LayoutDashboard,
-  BarChart3,
+  Activity,
   Package,
   Settings,
   ChevronRight,
@@ -33,7 +33,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   const { user, logout } = useAuthStore();
 
   return (
-    <aside className="w-full md:w-64 bg-[#0c101d] border-r border-purple-500/20 flex flex-col justify-between p-5 flex-shrink-0">
+    <aside className="w-full md:w-64 h-auto md:h-screen md:sticky md:top-0 bg-[#0c101d] border-r border-purple-500/20 flex flex-col justify-between p-5 flex-shrink-0 z-30">
       <div>
         {/* Logo & Brand */}
         <div className="flex items-center space-x-3 mb-8 px-2">
@@ -76,7 +76,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             }`}
           >
             <div className="flex items-center space-x-3">
-              <BarChart3 className="w-4 h-4" />
+              <Activity className="w-4 h-4" />
               <span>Grafikler</span>
             </div>
             <ChevronRight className="w-4 h-4 opacity-60" />
@@ -114,8 +114,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         </nav>
       </div>
 
-      {/* Sidebar Footer: Admin Profile & Logout */}
-      <div className="pt-6 border-t border-gray-800/80 mt-8 space-y-4">
+      {/* Permanently Fixed Sidebar Footer: Admin Profile & Logout */}
+      <div className="pt-4 border-t border-gray-800/80 mt-6 space-y-3 flex-shrink-0">
         <div className="flex items-center justify-between px-2">
           <div>
             <div className="text-xs font-bold text-white">{user?.name || user?.username}</div>

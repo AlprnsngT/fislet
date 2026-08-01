@@ -52,8 +52,8 @@ export const AdminDashboardView: React.FC = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#070a12] text-gray-100 font-sans flex flex-col md:flex-row">
-      {/* 1. Sidebar Navigation Component */}
+    <div className="h-screen bg-[#070a12] text-gray-100 font-sans flex flex-col md:flex-row overflow-hidden">
+      {/* 1. Sticky Fixed Sidebar Component */}
       <AdminSidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -62,8 +62,8 @@ export const AdminDashboardView: React.FC = () => {
         onRefresh={fetchAnalytics}
       />
 
-      {/* 2. Main Content View Area Orchestrating Decoupled SOLID Components */}
-      <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8">
+      {/* 2. Vertically Scrollable Content View Area */}
+      <main className="flex-1 h-screen overflow-y-auto p-6 md:p-8 space-y-8">
         {/* SEKME 1: ANALİZLER (KPI Kartları & Kategori Kartları) */}
         {activeTab === 'analytics' && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
@@ -80,14 +80,11 @@ export const AdminDashboardView: React.FC = () => {
           </motion.div>
         )}
 
-        {/* SEKME 2: GRAFİKLER (Alan & Çubuk Grafiği Aynı Anda) */}
+        {/* SEKME 2: GRAFİKLER (Alan Grafiği) */}
         {activeTab === 'charts' && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-            {/* Interactive Master Charts Component (Area & Bar stacked simultaneously) */}
-            <AdminMasterChart
-              dailyTrend={data?.dailyTrend}
-              topProducts={data?.topProducts}
-            />
+            {/* Area Chart Component */}
+            <AdminMasterChart dailyTrend={data?.dailyTrend} />
           </motion.div>
         )}
 
