@@ -136,11 +136,16 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
         const imageBlob = await imageBlobRes.blob();
 
         if (presignedData.uploadUrl && !presignedData.uploadUrl.includes('mock')) {
-          await fetch(presignedData.uploadUrl, {
+          const putRes = await fetch(presignedData.uploadUrl, {
             method: 'PUT',
             headers: { 'Content-Type': 'image/jpeg' },
             body: imageBlob,
           });
+          if (!putRes.ok) {
+            console.warn(`⚠️ [R2 PUT UPLOAD]: Presigned URL upload status ${putRes.status}`);
+          } else {
+            console.log('✅ [R2 PUT UPLOAD]: Fiş görseli R2 depolama alanına başarıyla yüklendi.');
+          }
         }
       } catch (uploadErr) {
         console.warn('Presigned R2 direct PUT upload warning:', uploadErr);
@@ -148,30 +153,31 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
 
       setStatusMessage('2/2 Yapay Zeka OCR Motoru (PaddleOCR) ile taranıyor...');
 
-      // 3. Send image data & fileKey to Hybrid Cascade OCR process API
+      // 3. Send fileKey and imageBase64 to Hybrid Cascade OCR process API
       const processRes = await fetch('/api/v1/receipts/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId,
           fileKey: presignedData.fileKey,
-          imageBase64: capturedImage, // Pass base64 data for local PaddleOCR processing
+          imageBase64: capturedImage,
         }),
       });
 
       const processData = await processRes.json();
-      if (!processRes.ok) throw new Error(processData.error || 'İşleme hatası');
-
-      setStatusMessage(processData.message || 'Fiş başarıyla doğrulandı!');
+      
+      const msg = processData.message || processData.error || (processData.success ? 'Fiş başarıyla doğrulandı!' : 'Fiş okunamadı');
+      setStatusMessage(msg);
       onScanComplete(processData);
 
       setTimeout(() => {
         setCapturedImage(null);
         setStatusMessage(null);
-      }, 3000);
+      }, 4000);
     } catch (err: any) {
       console.error(err);
-      setStatusMessage(`İşlem Hatası: ${err.message}`);
+      const friendlyErr = err.message || 'Sistem hatası oluştu. Lütfen tekrar deneyin.';
+      setStatusMessage(friendlyErr);
     } finally {
       setIsUploading(false);
     }

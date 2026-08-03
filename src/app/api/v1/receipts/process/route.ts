@@ -3,12 +3,13 @@ import { enqueueReceiptJob } from '@/infrastructure/queue/upstash_queue';
 import { prisma } from '@/infrastructure/db/prisma';
 import { parseReceiptText } from '@/shared/utils/receipt_parser';
 import { runGoogleVisionOCR } from '@/shared/utils/google_vision_ocr';
-import { execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
+import { downloadReceiptAsBase64 } from '@/infrastructure/storage/r2_downloader';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+export const maxDuration = 60; // Vercel function max duration
+
+const OCR_SERVER_URL = process.env.OCR_SERVER_URL || 'http://127.0.0.1:8100';
 
 export async function POST(req: NextRequest) {
   const timestamp = new Date().toLocaleTimeString('tr-TR');
@@ -48,32 +49,58 @@ export async function POST(req: NextRequest) {
     let ocrEngineUsed = 'paddleocr';
     let fallbackUsed = false;
 
-    // 2. KADEME 1: Synchronous Python PaddleOCR Engine Pass
-    if (imageBase64 && typeof imageBase64 === 'string') {
-      try {
-        console.log('⚡ [PADDLEOCR LOCAL ENGINE]: Python PaddleOCR CLI motoru çalıştırılıyor...');
-        const tempDir = path.join(process.cwd(), '.next', 'cache');
-        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-        
-        const tempFilePath = path.join(tempDir, `temp_receipt_${Date.now()}.jpg`);
-        const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-        fs.writeFileSync(tempFilePath, Buffer.from(base64Data, 'base64'));
+    // 2. KADEME 1: Kalıcı PaddleOCR HTTP Servisine async fetch
+    // Servis: PYTHONPATH=. python3 worker/ocr_server.py ile ayrı terminalde başlatılmalı
+    try {
+      console.log(`⚡ [PADDLEOCR HTTP]: Kalıcı OCR servisi çağrılıyor → ${OCR_SERVER_URL}/scan`);
 
-        const cliCmd = `PYTHONPATH=. python3 worker/cli_scan.py "${tempFilePath}"`;
-        const cliOutput = execSync(cliCmd, { cwd: process.cwd(), timeout: 25000 }).toString();
+      let targetBase64 = imageBase64;
 
-        // Clean up temp file
-        if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
-
-        const cliJson = JSON.parse(cliOutput);
-        if (cliJson.success && cliJson.rawText) {
-          ocrTextToParse = cliJson.rawText;
-          console.log(`✅ [PADDLEOCR SUCCESS]: PaddleOCR ${ocrTextToParse.length} karakter metin çıkardı!`);
+      // Eğer client base64 göndermediyse veya çok kısaysa R2'den authenticated S3 SDK ile indir
+      if (!targetBase64 || typeof targetBase64 !== 'string' || targetBase64.length < 500) {
+        console.log(`📥 [R2 DOWNLOAD]: Client'tan base64 gelmedi/küçük. R2'den (${fileKey}) authenticated indiriliyor...`);
+        const downloadedBase64 = await downloadReceiptAsBase64(fileKey);
+        if (downloadedBase64) {
+          targetBase64 = downloadedBase64;
+          console.log(`✅ [R2 DOWNLOAD SUCCESS]: ${Math.round(targetBase64.length / 1024)} KB base64 indirildi.`);
+        } else {
+          console.warn(`⚠️ [R2 DOWNLOAD FAILED]: R2'den dosya indirilemedi.`);
         }
-      } catch (paddleErr: any) {
-        console.warn('⚠️ [PADDLEOCR CLI WARNING]: Local PaddleOCR execution failed:', paddleErr.message);
+      } else {
+        console.log(`📦 [PADDLEOCR HTTP]: Client'tan gelen base64 payload (${Math.round(targetBase64.length / 1024)} KB) kullanılıyor`);
       }
+
+      if (targetBase64 && targetBase64.length > 500) {
+        const ocrRes = await fetch(`${OCR_SERVER_URL}/scan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: targetBase64 }),
+          signal: AbortSignal.timeout(30000), // 30 sn timeout
+        });
+
+        if (ocrRes.ok) {
+          const ocrJson = await ocrRes.json();
+          if (ocrJson.success && ocrJson.rawText) {
+            ocrTextToParse = ocrJson.rawText;
+            console.log(`✅ [PADDLEOCR SUCCESS]: ${ocrTextToParse.length} karakter metin çıkardı!`);
+          } else {
+            console.warn(`⚠️ [PADDLEOCR HTTP]: OCR başarısız - rawText boş. Detay:`, JSON.stringify(ocrJson));
+          }
+        } else {
+          const errBody = await ocrRes.text();
+          console.warn(`⚠️ [PADDLEOCR HTTP]: Servis ${ocrRes.status} döndü. Yanıt: ${errBody}`);
+        }
+      } else {
+        console.warn(`⚠️ [PADDLEOCR HTTP]: Geçerli bir görsel verisi bulunamadığından OCR atlandı.`);
+      }
+    } catch (paddleErr: any) {
+      console.warn('⚠️ [PADDLEOCR HTTP WARNING]: OCR servisi erişilemez:', paddleErr.message);
+      console.warn('💡 OCR servisi başlatmak için: PYTHONPATH=. python3 worker/ocr_server.py');
     }
+
+    // Fetch all categories to map category slugs to IDs
+    const categories = await prisma.category.findMany();
+    const categorySlugMap = new Map(categories.map((c) => [c.slug, c.id]));
 
     let parsed = parseReceiptText(ocrTextToParse);
 
@@ -120,7 +147,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
           success: false,
           isDuplicate: true,
-          message: '❌ Bu fiş daha önce sisteme taranmış! Mükerrer fiş kabul edilmez.',
+          errorReason: 'DUPLICATE',
+          message: '❌ Bu fiş daha önce sisteme okutulmuş! Mükerrer fiş kabul edilemez.',
           receiptId: duplicateRecord.id,
           status: 'DUPLICATE',
         }, { status: 400 });
@@ -155,11 +183,28 @@ export async function POST(req: NextRequest) {
           totalAmount: parsed.totalAmount,
           cashbackAmount,
           status,
-          rawOcrText: ocrTextToParse || (status === 'PROCESSED' ? `${parsed.merchantName} - TOPLAM ${parsed.totalAmount} TL` : 'Görselde Toplam Tutar tespit edilemedi'),
+          rawOcrText: ocrTextToParse || (status === 'PROCESSED' ? `${parsed.merchantName} - TOPLAM ${parsed.totalAmount} TL` : 'Görselde Toplam Tutar okunamadı'),
           ocrEngineUsed,
           fallbackUsed,
         },
       });
+
+      // Save extracted line items if available
+      if (parsed.items && parsed.items.length > 0) {
+        for (const item of parsed.items) {
+          const categoryId = categorySlugMap.get(item.categorySlug) || categorySlugMap.get('diger') || null;
+          await tx.receiptItem.create({
+            data: {
+              receiptId: createdReceipt.id,
+              categoryId,
+              itemName: item.itemName,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.totalPrice,
+            },
+          });
+        }
+      }
 
       if (status === 'PROCESSED' && cashbackAmount > 0) {
         let wallet = await tx.wallet.findUnique({ where: { userId } });
@@ -190,18 +235,21 @@ export async function POST(req: NextRequest) {
 
     await enqueueReceiptJob(userId, fileKey);
 
+    const friendlyMessage = status === 'PROCESSED'
+      ? `Fiş başarıyla doğrulandı! ₺${cashbackAmount.toFixed(2)} cüzdanınıza yüklendi.`
+      : '⚠️ Fiş reddedildi: Görselde Toplam Tutar okunamadı. Lütfen fişin alt kısmındaki toplam tutarın net göründüğünden emin olarak tekrar deneyin.';
+
     console.log(`⚡ [INSTANT DB SAVED]: Receipt ID=${receipt.id} | Engine=${ocrEngineUsed} | Status=${receipt.status} | Total=₺${parsed.totalAmount} | Cashback=₺${cashbackAmount}`);
     console.log('===============================================================\n');
 
     return NextResponse.json({
-      success: true,
-      message: status === 'PROCESSED'
-        ? `Fiş başarıyla doğrulandı! ₺${cashbackAmount.toFixed(2)} cüzdanınıza yüklendi.`
-        : 'Fiş reddedildi: Görselde Toplam Tutar tespit edilemedi.',
+      success: status === 'PROCESSED',
+      message: friendlyMessage,
       receiptId: receipt.id,
       status: receipt.status,
       totalAmount: parsed.totalAmount,
       cashbackAmount,
+      itemsCount: parsed.items ? parsed.items.length : 0,
     });
   } catch (error: any) {
     console.error('❌ Error processing receipt:', error);

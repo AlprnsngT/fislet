@@ -56,7 +56,7 @@ model Receipt {
   userId         String        @map("user_id")
   receiptHash    String        @unique @map("receipt_hash")
   imageUrl       String        @map("image_url")
-  vkn            String?       @db.VarChar(10)
+  vkn            String?       @db.VarChar(50)
   merchantName   String?       @map("merchant_name")
   receiptNo      String?       @map("receipt_no")
   receiptDate    DateTime?     @map("receipt_date")

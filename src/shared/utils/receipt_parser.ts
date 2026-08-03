@@ -1,5 +1,13 @@
 import { createHash } from 'crypto';
 
+export interface ExtractedReceiptItem {
+  itemName: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  categorySlug: string;
+}
+
 export interface ParsedReceiptData {
   vkn: string | null;
   merchantName: string;
@@ -9,31 +17,110 @@ export interface ParsedReceiptData {
   totalAmount: number;
   isValid: boolean;
   compositeHash: string;
+  items: ExtractedReceiptItem[];
+  rejectionReason?: 'DUPLICATE' | 'NO_TOTAL_AMOUNT' | 'UNREADABLE_IMAGE' | 'SYSTEM_ERROR';
 }
 
-// Helper to parse Turkish and standard price formats (e.g. "1.450,50", "1450.50", "45,00 TL")
+// Helper to parse Turkish and standard monetary price formats (e.g. "1.450,50", "1450.50", "45,00 TL")
+// STRICT: Must contain explicit decimal comma or dot followed by 1 or 2 digits (e.g. 62,00 or 150.50)
+// Rejects plain integer numbers like "62-", "2026", "12345" unless there is a decimal separator.
 function parseTurkishPrice(rawStr: string): number | null {
   if (!rawStr) return null;
-  // Match numbers with dot/comma separators (e.g. 1.250,50 or 1,250.50 or 45,00)
-  const match = rawStr.match(/(?:\d{1,3}(?:[\.\,]\d{3})+|\d+)(?:[\.\,]\d{1,2})?/);
+  const match = rawStr.match(/\b(?:\d{1,3}(?:[\.\,]\d{3})+|\d+)[\.\,](\d{1,2})\b/);
   if (!match) return null;
 
   let str = match[0];
-  // Case A: 1.450,50 (Turkish standard: dot = thousand, comma = decimal)
   if (str.includes('.') && str.includes(',')) {
     if (str.lastIndexOf(',') > str.lastIndexOf('.')) {
       str = str.replace(/\./g, '').replace(',', '.');
     } else {
-      // Case B: 1,450.50 (US standard)
       str = str.replace(/,/g, '');
     }
   } else if (str.includes(',')) {
-    // Only comma: e.g. "45,50" -> "45.50"
     str = str.replace(',', '.');
   }
 
   const val = parseFloat(str);
   return !isNaN(val) && val > 0 ? val : null;
+}
+
+/**
+ * Classifies merchant or product item into category slug
+ */
+export function classifyCategory(itemName: string, merchantName: string): string {
+  const text = `${merchantName} ${itemName}`.toUpperCase();
+
+  if (/(PETROL|OPET|BP|SHELL|TOTAL|HYPO|BENZ[İI]N|D[İI]ZEL|MOTOR[İI]N|LPG|MAZOT|OTO\s*YIKAMA)/i.test(text)) {
+    return 'akaryakit';
+  }
+  if (/(RESTORAN|CAFE|KAFE|LOKANTA|STARBUCKS|KÖFTE|KOFTE|BURGER|PIZZA|PİZZA|DÖNER|DONER|KEBAP|KAHVE|ÇAY|CAY|MENÜ|MENU|AYRAN|TATLI|PASTA|LAHMACUN|PİDE)/i.test(text)) {
+    return 'restoran-kafe';
+  }
+  if (/(ZARA|MANGO|LCW|KOTON|MAVİ|MAVI|FLO|NIKE|ADIDAS|T-SHIRT|PANTOLON|GÖMLEK|AYAKKABI|ÇORAP|CEKET|MONT|ELBİSE)/i.test(text)) {
+    return 'giyim';
+  }
+  if (/(TEKNOSA|TEKNO SA|MEDIA\s*MARKT|VATAN|APPLE|SAMSUNG|TELEFON|KABLO|KILIF|ŞARJ|SARJ|KULAKLIK|USB|BİLGİSAYAR)/i.test(text)) {
+    return 'elektronik';
+  }
+  if (/(ECZANE|GRATIS|WATSONS|ROSSMANN|KREM|[İI]LAÇ|VİTAMİN|PARFÜM|MAKYAJ|ŞAMPUAN|SAMPUAN)/i.test(text)) {
+    return 'saglik-kozmetik';
+  }
+  if (/(MARKET|MİGROS|MIGROS|BİM|BIM|A101|ŞOK|SOK|CARREFOUR|MACRO|PEYNİR|SÜT|SUT|YOĞURT|YOGURT|EKMEK|CİPS|CIPS|SU|BİSKÜVİ|ÇİKOLATA|ET|TAVUK|DETERJAN|PİRİNÇ|PIRINC|UN|ŞEKER|ZEYTİN|YAĞ|MANAV)/i.test(text)) {
+    return 'market';
+  }
+
+  return 'diger';
+}
+
+/**
+ * Extracts line items from receipt raw OCR text
+ */
+function extractReceiptItems(rawText: string, merchantName: string): ExtractedReceiptItem[] {
+  const lines = rawText.split('\n').map((l) => l.trim()).filter(Boolean);
+  const items: ExtractedReceiptItem[] = [];
+
+  const excludeKeywords = [
+    'TOPLAM', 'ODENECEK', 'ÖDENECEK', 'KDV', 'VERGI', 'VERGİ', 'TARİH', 'TARIH',
+    'FİŞ', 'FIS', 'SIRA', 'BELGE', 'TEL', 'MERSİS', 'MERSIS', 'TEŞEKKÜRLER', 'TESEKKURLER',
+    'KREDİ', 'KREDI', 'NAKİT', 'NAKIT', 'PARA', 'ÜSTÜ', 'USTU', 'Z NO', 'STOK', 'FATURA',
+    'ÖDENEN', 'ODENEN', 'KART', 'BANKA', 'TUTAR', 'TOPKDV'
+  ];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const upper = line.toUpperCase();
+
+    // Skip system/footer lines
+    if (excludeKeywords.some((kw) => upper.includes(kw))) {
+      continue;
+    }
+
+    // Pattern 1: "2 AD x 15,00 TL PEYNİR" or "PEYNİR 2 x 15.00"
+    const qtyPriceMatch = line.match(/(?:(\d+)\s*(?:AD|ADET|KG|GR|LITRE)?\s*[*xX]\s*)?([^\d%]+?)\s*(?:[*xX]\s*(\d+))?\s+(?:%?\d+\s+)?(\d+[\.\,]\d{2})\b/);
+
+    if (qtyPriceMatch) {
+      let rawName = (qtyPriceMatch[2] || '').trim();
+      // Remove leading digits or codes
+      rawName = rawName.replace(/^[0-9%\*\s\.\-]+/, '').trim();
+
+      const price = parseTurkishPrice(qtyPriceMatch[4]);
+      const qty = parseInt(qtyPriceMatch[1] || qtyPriceMatch[3] || '1', 10) || 1;
+
+      if (rawName.length >= 2 && price !== null && price > 0 && price < 100000) {
+        const categorySlug = classifyCategory(rawName, merchantName);
+        items.push({
+          itemName: rawName.substring(0, 80),
+          quantity: qty,
+          unitPrice: Math.round((price / qty) * 100) / 100,
+          totalPrice: price,
+          categorySlug,
+        });
+      }
+    }
+  }
+
+  // If no specific item lines parsed, fallback to single item representing receipt basket
+  return items;
 }
 
 export function parseReceiptText(rawText: string): ParsedReceiptData {
@@ -46,7 +133,9 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
       dateStr: null,
       totalAmount: 0,
       isValid: false,
+      rejectionReason: 'UNREADABLE_IMAGE',
       compositeHash: `rejected_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      items: [],
     };
   }
 
@@ -65,10 +154,8 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
     'TRENDYOL', 'HEPSİBURADA', 'GETİR', 'YEMEKSEPETİ', 'E-ARŞİV', 'E-FATURA'
   ];
 
-  // Search top 7 lines for known store keywords or company suffixes
   for (const line of lines.slice(0, 7)) {
     const upper = line.toUpperCase();
-    // Exclude system lines like HOŞGELDİNİZ, TARİH, MERSİS, FİŞ
     if (upper.includes('HOŞGELDİNİZ') || upper.includes('TARİH') || upper.includes('MERSİS') || upper.includes('FİŞ NO')) {
       continue;
     }
@@ -78,13 +165,12 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
     }
   }
 
-  // Fallback: If no suffix matched, pick the first line in top 5 that has letters and is not a date/number
   if (merchantName === 'BİLİNMEYEN MAĞAZA') {
     for (const line of lines.slice(0, 5)) {
       const upper = line.toUpperCase();
       const hasLetter = /[\p{L}]/u.test(line);
       const isSystemLine = upper.includes('HOŞGELDİNİZ') || upper.includes('TARİH') || upper.includes('MERSİS') || upper.includes('FIŞ') || upper.includes('FİŞ') || upper.includes('VKN') || upper.includes('TEL');
-      
+
       if (hasLetter && !isSystemLine && line.length >= 3) {
         merchantName = line.replace(/^[^\p{L}]+/u, '').trim().substring(0, 40);
         break;
@@ -92,9 +178,8 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
     }
   }
 
-  // 2. VKN / TCKN / MERSİS NO Extraction (10, 11, or 16 digits)
+  // 2. VKN / TCKN / MERSİS NO Extraction
   let vkn: string | null = null;
-  // Match MERSIS (16 digits) or VKN (10 digits) or TCKN (11 digits)
   const mersisMatch = rawText.match(/(?:MERS[İI]S\s*NO|MERS[İI]S)?\s*[:\.]?\s*\b(\d{16})\b/i);
   const vknMatch = rawText.match(/(?:VKN|TCKN|VERG[İI]\s*NO)?\s*[:\.]?\s*\b(\d{10,11})\b/i);
 
@@ -103,20 +188,17 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
   } else if (vknMatch) {
     vkn = vknMatch[1];
   } else {
-    // Look for standalone 10 or 16 digits in text
     const digitMatch = rawText.match(/\b(\d{10}|\d{16})\b/);
     if (digitMatch) {
       vkn = digitMatch[1];
     }
   }
 
-  // 3. Exact Receipt Date & Time Parsing (Combine separate date and time matches if needed)
+  // 3. Exact Receipt Date & Time Parsing
   let dateObj = new Date();
   let dateStr: string | null = null;
 
-  // Extract Date string: DD.MM.YYYY, DD/MM/YYYY, or DD-MM-YYYY
   const dateMatch = rawText.match(/\b(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{2,4})\b/);
-  // Extract Time string: HH:MM or HH:MM:SS
   const timeMatch = rawText.match(/\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b/);
 
   if (dateMatch) {
@@ -142,20 +224,14 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
     }
   }
 
-  // 4. Receipt / Z Number Extraction (FIŞ NO, FIS NO, Z NO, SIRA NO, BELGE NO, ETTN)
+  // 4. Receipt / Z Number Extraction (Strictly require explicit receipt label)
   let receiptNo: string | null = null;
   const receiptNoMatch = rawText.match(/(?:FI[ŞS]\s*NO|Z\s*NO|F[Iİ]S\s*NO|SIRA\s*NO|BELGE\s*NO|ETTN)\s*[:\.]?\s*([A-Za-z0-9-]+)/i);
   if (receiptNoMatch) {
-    receiptNo = receiptNoMatch[1];
-  } else {
-    const noLine = lines.find((l) => /NO\s*[:\.]?/i.test(l));
-    if (noLine) {
-      const numMatch = noLine.match(/\d+/);
-      if (numMatch) receiptNo = numMatch[0];
-    }
+    receiptNo = receiptNoMatch[1].trim();
   }
 
-  // 5. Total Amount Extraction (Support E-Arşiv / E-Fatura keywords & Turkish thousand separators)
+  // 5. Total Amount Extraction
   let totalAmount = 0;
   const totalKeywords = [
     'ÖDENECEK TUTAR', 'ODENECEK TUTAR', 'ÖDENECEK', 'ODENECEK',
@@ -165,7 +241,6 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
     'KART', 'NAKİT', 'NAKIT', 'CREDIT CARD'
   ];
 
-  // Scan lines backwards (totals are near bottom)
   for (const line of [...lines].reverse()) {
     const upper = line.toUpperCase();
     if (totalKeywords.some((kw) => upper.includes(kw))) {
@@ -177,9 +252,9 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
     }
   }
 
-  // Fallback: search for largest valid price in raw text if keyword line failed
+  // Fallback: strictly search for numbers with explicit decimal comma/dot followed by 1 or 2 digits
   if (totalAmount === 0) {
-    const allMatches = Array.from(rawText.matchAll(/(?:\d{1,3}(?:[\.\,]\d{3})+|\d+)(?:[\.\,]\d{1,2})/g));
+    const allMatches = Array.from(rawText.matchAll(/\b(?:\d{1,3}(?:[\.\,]\d{3})+|\d+)[\.\,](\d{1,2})\b/g));
     const parsedPrices = allMatches
       .map((m) => parseTurkishPrice(m[0]))
       .filter((p): p is number => p !== null && p > 0);
@@ -191,7 +266,22 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
 
   const isValid = totalAmount > 0;
 
-  // 6. Compute SHA-256 Composite Hash for Duplicate Prevention
+  // 6. Extract Individual Line Items
+  let items = extractReceiptItems(rawText, merchantName);
+
+  // Fallback: If no item lines extracted, add 1 item for the whole receipt
+  if (items.length === 0 && isValid) {
+    const categorySlug = classifyCategory(merchantName, merchantName);
+    items.push({
+      itemName: `${merchantName} Alışverişi`,
+      quantity: 1,
+      unitPrice: totalAmount,
+      totalPrice: totalAmount,
+      categorySlug,
+    });
+  }
+
+  // 7. Compute SHA-256 Composite Hash for Duplicate Prevention
   const merchantKey = (vkn || merchantName).toLowerCase().replace(/\s+/g, '');
   const dateKey = (dateStr || dateObj.toISOString()).replace(/\s+/g, '');
   const receiptNoKey = (receiptNo || '').replace(/\s+/g, '');
@@ -210,6 +300,8 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
     dateStr,
     totalAmount,
     isValid,
+    rejectionReason: isValid ? undefined : 'NO_TOTAL_AMOUNT',
     compositeHash,
+    items,
   };
 }

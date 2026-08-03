@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Package, Search } from 'lucide-react';
+import { Package, Search, Filter } from 'lucide-react';
 
 export interface ProductItem {
   id: string;
@@ -20,32 +20,61 @@ interface AdminProductsTableProps {
 
 export const AdminProductsTable: React.FC<AdminProductsTableProps> = ({ products = [] }) => {
   const [productSearch, setProductSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
 
-  const filteredProducts = products.filter(
-    (p) =>
+  const categories = Array.from(new Set(products.map((p) => p.categoryName || 'Genel')));
+
+  const filteredProducts = products.filter((p) => {
+    const matchesSearch =
       p.itemName.toLowerCase().includes(productSearch.toLowerCase()) ||
       p.categoryName.toLowerCase().includes(productSearch.toLowerCase()) ||
-      p.merchantName.toLowerCase().includes(productSearch.toLowerCase())
-  );
+      p.merchantName.toLowerCase().includes(productSearch.toLowerCase());
+
+    const matchesCategory = selectedCategory === 'ALL' || p.categoryName === selectedCategory;
+
+    return matchesSearch && matchesCategory;
+  });
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black text-white">ÜRÜNLERİM KATALOĞU</h2>
-          <p className="text-xs text-gray-400">Fişlerden okutularak veritabanına yazılan tüm ürünlerin canlı listesi</p>
+          <h2 className="text-2xl font-black text-white">ÜRÜNLERİM VE KATEGORİLER KATALOĞU</h2>
+          <p className="text-xs text-gray-400">
+            Fişlerden otomatik çıkarılan ve kategorilerine göre sınıflandırılan canlı ürün verileri
+          </p>
         </div>
 
-        {/* Search Bar */}
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-500" />
-          <input
-            type="text"
-            value={productSearch}
-            onChange={(e) => setProductSearch(e.target.value)}
-            placeholder="Ürün, kategori veya marka ara..."
-            className="w-full bg-gray-900 border border-gray-800 rounded-xl py-2 pl-9 pr-4 text-xs font-semibold text-white focus:outline-none focus:border-purple-500 transition-colors"
-          />
+        {/* Filters */}
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          {/* Category Dropdown */}
+          <div className="relative w-full sm:w-48">
+            <Filter className="absolute left-3 top-2.5 w-4 h-4 text-purple-400" />
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-800 rounded-xl py-2 pl-9 pr-4 text-xs font-bold text-white focus:outline-none focus:border-purple-500 transition-colors appearance-none cursor-pointer"
+            >
+              <option value="ALL">Tüm Kategoriler ({products.length})</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Search Bar */}
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-500" />
+            <input
+              type="text"
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+              placeholder="Ürün, kategori veya marka ara..."
+              className="w-full bg-gray-900 border border-gray-800 rounded-xl py-2 pl-9 pr-4 text-xs font-semibold text-white focus:outline-none focus:border-purple-500 transition-colors"
+            />
+          </div>
         </div>
       </div>
 
@@ -55,7 +84,7 @@ export const AdminProductsTable: React.FC<AdminProductsTableProps> = ({ products
           <table className="w-full text-left text-xs">
             <thead className="bg-gray-900/90 text-gray-400 uppercase font-bold border-b border-gray-800">
               <tr>
-                <th className="py-3.5 px-4">Ürün Adı</th>
+                <th className="py-3.5 px-4">Ürün / Kalem Adı</th>
                 <th className="py-3.5 px-4">Kategori</th>
                 <th className="py-3.5 px-4">Mağaza / Marka</th>
                 <th className="py-3.5 px-4 text-center">Adet</th>
@@ -89,7 +118,7 @@ export const AdminProductsTable: React.FC<AdminProductsTableProps> = ({ products
               ) : (
                 <tr>
                   <td colSpan={7} className="text-center py-10 text-gray-500 text-sm">
-                    Henüz okutulmuş ürün verisi bulunamadı.
+                    Kriterlere uygun ürün verisi bulunamadı.
                   </td>
                 </tr>
               )}
