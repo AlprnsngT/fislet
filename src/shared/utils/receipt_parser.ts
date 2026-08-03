@@ -11,6 +11,31 @@ export interface ParsedReceiptData {
   compositeHash: string;
 }
 
+// Helper to parse Turkish and standard price formats (e.g. "1.450,50", "1450.50", "45,00 TL")
+function parseTurkishPrice(rawStr: string): number | null {
+  if (!rawStr) return null;
+  // Match numbers with dot/comma separators (e.g. 1.250,50 or 1,250.50 or 45,00)
+  const match = rawStr.match(/(?:\d{1,3}(?:[\.\,]\d{3})+|\d+)(?:[\.\,]\d{1,2})?/);
+  if (!match) return null;
+
+  let str = match[0];
+  // Case A: 1.450,50 (Turkish standard: dot = thousand, comma = decimal)
+  if (str.includes('.') && str.includes(',')) {
+    if (str.lastIndexOf(',') > str.lastIndexOf('.')) {
+      str = str.replace(/\./g, '').replace(',', '.');
+    } else {
+      // Case B: 1,450.50 (US standard)
+      str = str.replace(/,/g, '');
+    }
+  } else if (str.includes(',')) {
+    // Only comma: e.g. "45,50" -> "45.50"
+    str = str.replace(',', '.');
+  }
+
+  const val = parseFloat(str);
+  return !isNaN(val) && val > 0 ? val : null;
+}
+
 export function parseReceiptText(rawText: string): ParsedReceiptData {
   if (!rawText || typeof rawText !== 'string' || !rawText.trim()) {
     return {
@@ -36,7 +61,8 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
     'LTD.ŞTİ', 'LTD. ŞTİ', 'LTD.ŞTI', 'A.Ş.', 'A.S.', 'TİC.', 'TIC.', 'SAN.', 'SANAYİ',
     'MARKET', 'MAĞAZA', 'MAGAZA', 'MAĞAZACILIK', 'MAGAZACILIK', 'GIDA', 'RESTORAN', 'CAFE', 'KAFE',
     'PETROL', 'ECZANE', 'BAKKAL', 'MANAV', 'A101', 'MİGROS', 'MIGROS', 'BİM', 'BIM', 'ŞOK', 'SOK',
-    'CARREFOURSA', 'MACROCENTER', 'KÖFTECİ YUSUF', 'KOFTECI YUSUF', 'BURGER', 'MC DONALDS', 'STARBUCKS'
+    'CARREFOURSA', 'MACROCENTER', 'KÖFTECİ YUSUF', 'KOFTECI YUSUF', 'BURGER', 'MC DONALDS', 'STARBUCKS',
+    'TRENDYOL', 'HEPSİBURADA', 'GETİR', 'YEMEKSEPETİ', 'E-ARŞİV', 'E-FATURA'
   ];
 
   // Search top 7 lines for known store keywords or company suffixes
@@ -52,7 +78,7 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
     }
   }
 
-  // Fallback: If no suffix matched, pick the first line in top 4 that has letters and is not a date/number
+  // Fallback: If no suffix matched, pick the first line in top 5 that has letters and is not a date/number
   if (merchantName === 'BİLİNMEYEN MAĞAZA') {
     for (const line of lines.slice(0, 5)) {
       const upper = line.toUpperCase();
@@ -129,32 +155,37 @@ export function parseReceiptText(rawText: string): ParsedReceiptData {
     }
   }
 
-  // 5. Total Amount Extraction (TOPLAM or TUTAR line)
+  // 5. Total Amount Extraction (Support E-Arşiv / E-Fatura keywords & Turkish thousand separators)
   let totalAmount = 0;
-  const totalKeywords = ['TOPLAM', 'TUTAR', 'ÖDENEN', 'ODENEN', 'KART', 'TOP', 'GENEL TOPLAM', 'KDV DAHİL TOPLAM'];
-  const priceRegex = /(\d+[,\.]\d{2})/;
+  const totalKeywords = [
+    'ÖDENECEK TUTAR', 'ODENECEK TUTAR', 'ÖDENECEK', 'ODENECEK',
+    'GENEL TOPLAM', 'TOPLAM TUTAR', 'FATURA TUTARI', 'NET TUTAR',
+    'ÖDENEN TUTAR', 'ODENEN TUTAR', 'ÖDENEN', 'ODENEN',
+    'TOPLAM', 'TUTAR', 'KDV DAHİL TOPLAM', 'KDV DAHIL TOPLAM',
+    'KART', 'NAKİT', 'NAKIT', 'CREDIT CARD'
+  ];
 
+  // Scan lines backwards (totals are near bottom)
   for (const line of [...lines].reverse()) {
     const upper = line.toUpperCase();
     if (totalKeywords.some((kw) => upper.includes(kw))) {
-      const match = line.match(priceRegex);
-      if (match) {
-        const parsedFloat = parseFloat(match[1].replace(',', '.'));
-        if (!isNaN(parsedFloat) && parsedFloat > 0) {
-          totalAmount = parsedFloat;
-          break;
-        }
+      const price = parseTurkishPrice(line);
+      if (price !== null && price > 0) {
+        totalAmount = price;
+        break;
       }
     }
   }
 
-  // Fallback: search for largest price float in raw text if keyword line failed
+  // Fallback: search for largest valid price in raw text if keyword line failed
   if (totalAmount === 0) {
-    const allPrices = Array.from(rawText.matchAll(/(\d+[,\.]\d{2})/g))
-      .map((m) => parseFloat(m[1].replace(',', '.')))
-      .filter((p) => !isNaN(p) && p > 0);
-    if (allPrices.length > 0) {
-      totalAmount = Math.max(...allPrices);
+    const allMatches = Array.from(rawText.matchAll(/(?:\d{1,3}(?:[\.\,]\d{3})+|\d+)(?:[\.\,]\d{1,2})/g));
+    const parsedPrices = allMatches
+      .map((m) => parseTurkishPrice(m[0]))
+      .filter((p): p is number => p !== null && p > 0);
+
+    if (parsedPrices.length > 0) {
+      totalAmount = Math.max(...parsedPrices);
     }
   }
 
