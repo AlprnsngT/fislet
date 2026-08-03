@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { Camera, RefreshCw, UploadCloud, CheckCircle2, AlertCircle, FileUp, ScanText } from 'lucide-react';
+import { Camera, RefreshCw, UploadCloud, FileUp, ScanText, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface CameraViewProps {
@@ -117,7 +117,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
     if (!capturedImage) return;
 
     setIsUploading(true);
-    setStatusMessage('1/2 Fiş görseli bulut depolama alanına aktarılıyor...');
+    setStatusMessage('1/2 Fiş görseli hazırlanıyor ve R2 bulut alanına aktarılıyor...');
 
     try {
       // 1. Fetch presigned upload URL
@@ -130,15 +130,32 @@ export const CameraView: React.FC<CameraViewProps> = ({ userId, onScanComplete }
       const presignedData = await presignedRes.json();
       if (!presignedRes.ok) throw new Error(presignedData.error || 'Upload URL hatası');
 
-      setStatusMessage('2/2 Hibrit OCR (PaddleOCR + Google Vision API) ile taranıyor...');
+      // 2. Convert base64 image data to Blob and upload to presigned R2 URL
+      try {
+        const imageBlobRes = await fetch(capturedImage);
+        const imageBlob = await imageBlobRes.blob();
 
-      // 2. Send image data to Hybrid Cascade OCR process API
+        if (presignedData.uploadUrl && !presignedData.uploadUrl.includes('mock')) {
+          await fetch(presignedData.uploadUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'image/jpeg' },
+            body: imageBlob,
+          });
+        }
+      } catch (uploadErr) {
+        console.warn('Presigned R2 direct PUT upload warning:', uploadErr);
+      }
+
+      setStatusMessage('2/2 Yapay Zeka OCR Motoru (PaddleOCR) ile taranıyor...');
+
+      // 3. Send image data & fileKey to Hybrid Cascade OCR process API
       const processRes = await fetch('/api/v1/receipts/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId,
           fileKey: presignedData.fileKey,
+          imageBase64: capturedImage, // Pass base64 data for local PaddleOCR processing
         }),
       });
 

@@ -3,6 +3,9 @@ import { enqueueReceiptJob } from '@/infrastructure/queue/upstash_queue';
 import { prisma } from '@/infrastructure/db/prisma';
 import { parseReceiptText } from '@/shared/utils/receipt_parser';
 import { runGoogleVisionOCR } from '@/shared/utils/google_vision_ocr';
+import { execSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -14,7 +17,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { userId, fileKey, rawOcrTextFromClient } = body;
+    const { userId, fileKey, rawOcrTextFromClient, imageBase64 } = body;
 
     console.log(`👤 User ID: ${userId}`);
     console.log(`📁 File Key: ${fileKey}`);
@@ -41,13 +44,40 @@ export async function POST(req: NextRequest) {
     // Public Image URL in R2 Storage
     const imageUrl = `https://storage.r2.cloudflarestorage.com/fisokut-receipts/${fileKey}`;
 
-    // 2. KADEME 1: Primary OCR Pass (PaddleOCR / Client OCR Text)
-    const ocrTextToParse = rawOcrTextFromClient || '';
-    let parsed = parseReceiptText(ocrTextToParse);
+    let ocrTextToParse = rawOcrTextFromClient || '';
     let ocrEngineUsed = 'paddleocr';
     let fallbackUsed = false;
 
-    // 3. KADEME 2: Google Cloud Vision API Fallback (If Primary Pass failed or total amount missing)
+    // 2. KADEME 1: Synchronous Python PaddleOCR Engine Pass
+    if (imageBase64 && typeof imageBase64 === 'string') {
+      try {
+        console.log('⚡ [PADDLEOCR LOCAL ENGINE]: Python PaddleOCR CLI motoru çalıştırılıyor...');
+        const tempDir = path.join(process.cwd(), '.next', 'cache');
+        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+        
+        const tempFilePath = path.join(tempDir, `temp_receipt_${Date.now()}.jpg`);
+        const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+        fs.writeFileSync(tempFilePath, Buffer.from(base64Data, 'base64'));
+
+        const cliCmd = `PYTHONPATH=. python3 worker/cli_scan.py "${tempFilePath}"`;
+        const cliOutput = execSync(cliCmd, { cwd: process.cwd(), timeout: 25000 }).toString();
+
+        // Clean up temp file
+        if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+
+        const cliJson = JSON.parse(cliOutput);
+        if (cliJson.success && cliJson.rawText) {
+          ocrTextToParse = cliJson.rawText;
+          console.log(`✅ [PADDLEOCR SUCCESS]: PaddleOCR ${ocrTextToParse.length} karakter metin çıkardı!`);
+        }
+      } catch (paddleErr: any) {
+        console.warn('⚠️ [PADDLEOCR CLI WARNING]: Local PaddleOCR execution failed:', paddleErr.message);
+      }
+    }
+
+    let parsed = parseReceiptText(ocrTextToParse);
+
+    // 3. KADEME 2: Google Cloud Vision API Fallback (If PaddleOCR failed or total amount missing)
     if (!parsed.isValid || parsed.totalAmount <= 0) {
       console.log('⚠️ [CASCADE HYBRID OCR]: Kademe 1 toplam tutar bulamadı. Google Cloud Vision API çalıştırılıyor...');
       const visionParsed = await runGoogleVisionOCR(imageUrl);
